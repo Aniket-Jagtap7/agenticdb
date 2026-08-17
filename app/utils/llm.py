@@ -12,6 +12,7 @@ def get_llm(
     top_p: float = 1,
     seed: int = 42,
     n: int = 1,
+    streaming = False
 ) -> ChatOpenAI:
     return ChatOpenAI(
         model=model,
@@ -20,6 +21,7 @@ def get_llm(
         top_p=top_p,
         seed=seed,
         n=n,
+        streaming= streaming
     )
 
 

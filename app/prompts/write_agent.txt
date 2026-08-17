@@ -26,6 +26,7 @@ Error handling:
     4. If Model call limits exceeded:model call limit execeeded.
     5. If tool response is in natural language but not an error, return as query_result as natural language responding to user_query.
     6. If user_query, tool, tool_description, tool_args are completely mismatch then return, user_query and tool mistmacthed as retry_feedback.
+    
 Output:
     - On success: return a natural language confirmation.
     - Final output must be a string.
