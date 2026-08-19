@@ -6,7 +6,8 @@ from langgraph.graph import END, StateGraph , START
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command, interrupt
 from collections.abc import Callable
-from typing import TypedDict
+from typing import TypedDict, Annotated
+from operator import add
 from pydantic import BaseModel, ValidationError
 import asyncio
 import uuid
@@ -31,7 +32,7 @@ class AgentState(TypedDict):
     retry_feedback : str | None = None
     Insufficient_data : str | None = None
     call_limit : str | None = None
-    revised_input : str | None = None
+    revised_input : Annotated[list[str], add]
 
 class Tool_Node_Output(BaseModel):
     tool : list[str]
@@ -117,7 +118,7 @@ async def  final_node(state : AgentState):
                         )
     
     requested_info = f"requested_data:{state.get("revised_input")}" if state.get("revised_input") else ""
-
+   
     human_msg = HumanMessage(content=f"""
                              user_query : {state.get("user_query")},
                              {requested_info}
@@ -141,7 +142,6 @@ async def  final_node(state : AgentState):
                 "query_result": structured.query_result if structured else None,
                 "retry_feedback": structured.retry_feedback if structured else None,
                 "Insufficient_data": structured.Insufficient_data if structured else None,
-                "revised_input" : None
             }
         
         # CASE 2: Tool call → HITL flow
@@ -231,7 +231,6 @@ async def  final_node(state : AgentState):
             "query_result" : structured.query_result if structured else None,
             "retry_feedback" : structured.retry_feedback if structured else None,
             "Insufficient_data" : structured.Insufficient_data if structured else None,
-            "revised_input" : None
         }
     
     except Exception as e:
@@ -239,12 +238,11 @@ async def  final_node(state : AgentState):
         
 
 def request_info_node(state : AgentState):
-    #print(state.get("Insufficient_data"),":")
-
+   
     revised_input = interrupt(state["Insufficient_data"])
-
+   
     return {
-        "revised_input": revised_input,
+        "revised_input": [revised_input],
         "Insufficient_data" : ""
     }
 
@@ -287,39 +285,39 @@ graph.add_conditional_edges(
         "select_tool_node": "select_tool_node",
     }
 )
+
 graph.add_edge("request_info_node", "final_node")
 
 write_graph = graph.compile(checkpointer=InMemorySaver())
 
 
 async def invoke_write_agent(user_query : str):
-    input_msg = {"user_query" : user_query}
+    input_msg = {"user_query" : user_query, "revised_input":[]}
     response = await write_graph.ainvoke(input_msg, config=graph_config, version="v2")
     
     if not response.interrupts:   
         return {
-            "query_result" : response.get("query_result", None),
-            "retry_feedback" : response.get("retry_feedback", None),
-            "Insufficient_data" : response.get("Insufficient_data")
+            "query_result" : response.value.get("query_result", None),
+            "retry_feedback" : response.value.get("retry_feedback", None),
+            "Insufficient_data" : response.value.get("Insufficient_data")
         } 
     
-    print("="*100)
-    graph_interrupts = response.interrupts[0].value
-    print("Graph interrupts:", graph_interrupts)
-    updated_input = input("enter requested details:")
-    revised_input = {
-        graph_interrupts : updated_input
-    }
-    
-    resumed_response = await write_graph.ainvoke(
-        Command(resume= revised_input),
-        config=graph_config
-    )
-    
+    while response.interrupts:
+        print("="*100)
+        graph_interrupts = response.interrupts[0].value
+        print("Graph interrupts:", graph_interrupts)
+        updated_input = input("enter requested details:")
+        
+        response = await write_graph.ainvoke(
+            Command(resume= updated_input),
+            config=graph_config,
+            version="v2"
+        )
+     
     return {
-        "query_result" : resumed_response.get("query_result", None),
-        "retry_feedback" : resumed_response.get("retry_feedback", None),
-        "Insufficient_data" : resumed_response.get("Insufficient_data")
+        "query_result" : response.value.get("query_result", None),
+        "retry_feedback" : response.value.get("retry_feedback", None),
+        "Insufficient_data" : response.value.get("Insufficient_data")
     }
 
 
