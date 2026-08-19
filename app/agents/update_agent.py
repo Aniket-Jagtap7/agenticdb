@@ -3,8 +3,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.agents.middleware import  ModelCallLimitMiddleware, HumanInTheLoopMiddleware, ToolCallLimitMiddleware
 from langgraph.graph import END, StateGraph , START
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import Command
-from typing import TypedDict
+from langgraph.types import Command, interrupt
+from typing import TypedDict, Annotated
+from operator import add
 from pydantic import BaseModel
 from enum import Enum
 import asyncio
@@ -12,8 +13,14 @@ import uuid
 from utils.prompt_loader import load_prompt
 from utils.llm import get_llm
 from utils.mcp_client import MCPTools
-thread_id = str(uuid.uuid4())
 
+
+# config ID's for interrupts
+thread_id = str(uuid.uuid4())
+agent_config = {"configurable": {"thread_id": f"agent_{thread_id}"}}
+graph_config = {"configurable" : {"thread_id": f"graph_{thread_id}"}}
+
+# LLM initialization
 llm = get_llm()
 
 class AgentState(TypedDict):
@@ -25,6 +32,7 @@ class AgentState(TypedDict):
     Insufficient_data : str | None = None 
     retry_count : int 
     Intent : str
+    revised_input : Annotated[list[str], add]
 
 class QueryIntent(str, Enum):
     UPDATE = 'UPDATE'
@@ -114,7 +122,7 @@ async def risk_analyzer(query):
 
 
 config = {"configurable": {"thread_id": thread_id}}
-allowed_tool = "run_db_query"
+allowed_tool = "run_query"
 tool_list = asyncio.run(MCPTools.update_tools())
 tool = [tool for tool in tool_list if tool.name == allowed_tool]
 
@@ -139,9 +147,12 @@ Intents = {
 async def final_node(state : AgentState):
     
     schema = {"table": state.get("table"), "columns" : state.get("schema")} 
+    requested_info = f"requested_data:{state.get("revised_input")}" if state.get("revised_input") else ""
+    
     human_msg = HumanMessage(content=f"""
                              user_query : {state.get("user_query")},
-                             schema : {schema}
+                             schema : {schema},
+                             {requested_info}
                              """
                             )
     
@@ -151,119 +162,143 @@ async def final_node(state : AgentState):
             {
                 "messages":[system_prompt, human_msg]
             },
-            config = config,
+            config = agent_config,
             version= "v2" 
         )
-
+      
         # CASE 1: No tool call → directly return response
         if not response.interrupts:
             structured = response.value.get("structured_response")
 
             return {
-                "query_result": str(structured.query_result) if structured else None,
+                "query_result": structured.query_result if structured else None,
                 "retry_feedback": structured.retry_feedback if structured else None,
-                "Insufficient_data": str(structured.Insufficient_data) if structured else None,
+                "Insufficient_data": structured.Insufficient_data if structured else None,
                 "retry_count" : state.get("retry_count", 0) + 1
             }
         
          # CASE 2: Tool call → HITL flow
-       
-        print("="*100)
-        Tool_info = response.interrupts[0].value['action_requests'][0]
-        print("Tool_action", Tool_info['description'])
-        risk = await risk_analyzer(Tool_info['args'])
-        print("Approximately,", risk[0]['text'])
-        decision = ['approve', 'edit', 'respond', 'reject']
-
-        while True:
-            user_input = input(" Enter Decision (approve/edit/respond/reject): ").strip().lower()
-            if user_input in decision:
-                break
-            else:
-                print("provide correct input!!!")
-
-        interrupt = response.interrupts[0].value
-        decisions = []
-
-        for action in interrupt["action_requests"]:
-            if user_input == "respond":
-                msg = input("Enter response message: ")
-                decisions.append({
-                    "type": "respond",
-                    "action_name": action["name"],
-                    "message":  f"HUMAN REVIEW RESPONSE: {msg}"
-                })
-
-            elif user_input == "reject":
-                msg = input("Enter rejection reason: ")
-                decisions.append({
-                    "type": "reject",
-                    "action_name": action["name"],
-                    "message": f"HUMAN REVIEW REJECTED: {msg}"
-                })
-
-            elif user_input == "edit":
-                
-                original_args = action["args"].copy()
-
-                print("Original Data:", original_args)
-                print("Enter fields to update (leave blank to keep same)")
-
-                updated_data = {}
-
-                for key, value in original_args.items():
-                    new_val = input(f"{key} ({value}): ").strip()
-
-                    if new_val:
-                        updated_data[key] = new_val
-                    else:
-                        updated_data[key] = value  
-
-                        decisions.append({
-                            "type": "edit",
-                            "action_name": action["name"],
-                            "edited_action":{
-                                "name": action["name"],
-                                "args": updated_data
-                            }
-                        })
-
-            else:  
-                decisions.append({
-                    "type": "approve",
-                    "action_name": action["name"]
-                })
+        while response.interrupts:
             
-        resumed_response = await agent.ainvoke(
-            Command(
-                resume = {"decisions": decisions},
-            ),
-            config=config,
-            version="v2",
-        )
-        
-        #print("="*100)
-        #print("resumed_response:", resumed_response.value)
-        structured = resumed_response.value.get("structured_response")
-        #print("="*100)
-        #print(structured)
+            print(f"table {state.get("table")} will be updated")
+            tools = [tool for tool in response.interrupts[0].value['action_requests']]
+
+            for tool in tools:
+                risk = await risk_analyzer(tool['args'])
+                print("Approximately,", risk[0]['text'])
+            
+            decision = ['approve', 'edit', 'respond', 'reject']
+
+            while True:
+                user_input = input(" Enter Decision (approve/edit/respond/reject): ").strip().lower()
+                if user_input in decision:
+                    break
+                else:
+                    print("provide correct input!!!")
+
+            interrupt = response.interrupts[0].value
+            decisions = []
+
+            for action in interrupt["action_requests"]:
+                if user_input == "respond":
+                    msg = input("Enter response message: ")
+                    decisions.append({
+                        "type": "respond",
+                        "action_name": action["name"],
+                        "message":  f"HUMAN REVIEW RESPONSE: {msg}"
+                    })
+
+                elif user_input == "reject":
+                    msg = input("Enter rejection reason: ")
+                    decisions.append({
+                        "type": "reject",
+                        "action_name": action["name"],
+                        "message": f"HUMAN REVIEW REJECTED: {msg}"
+                    })
+
+                elif user_input == "edit":
+                    
+                    original_args = action["args"].copy()
+
+                    print("Original Data:", original_args)
+                    print("Enter fields to update (leave blank to keep same)")
+
+                    updated_data = {}
+
+                    for key, value in original_args.items():
+                        new_val = input(f"{key} ({value}): ").strip()
+
+                        if new_val:
+                            updated_data[key] = new_val
+                        else:
+                            updated_data[key] = value  
+
+                            decisions.append({
+                                "type": "edit",
+                                "action_name": action["name"],
+                                "edited_action":{
+                                    "name": action["name"],
+                                    "args": updated_data
+                                }
+                            })
+
+                else:  
+                    decisions.append({
+                        "type": "approve",
+                        "action_name": action["name"]
+                    })
+                
+            response = await agent.ainvoke(
+                Command(
+                    resume = {"decisions": decisions},
+                ),
+                config=agent_config,
+                version="v2",
+            )
+               
+        structured = response.value.get("structured_response")
+       
         return {
-            "query_result" : str(structured.query_result) if structured else None,
+            "query_result" : structured.query_result if structured else None,
             "retry_feedback" : structured.retry_feedback if structured else None,
-            "Insufficient_data" : str(structured.Insufficient_data) if structured else None,
+            "Insufficient_data" : structured.Insufficient_data if structured else None,
             "retry_count" : state.get("retry_count", 0) + 1
         }
     
     except Exception as e:
-        return {"call_limit" : str(e)}
+        return {"Error" : str(e)}
+
+
+def request_info_node(state : AgentState):
+    
+    revised_input = interrupt(state["Insufficient_data"])
+    
+    return {
+        "revised_input": [revised_input],
+        "Insufficient_data" : ""
+    }
+
 
 # Conditional Edges
 MAX_RETRY = 2
 def route_after_final(state: AgentState):
-    if state.get("retry_feedback") and state.get("retry_count", 0) < MAX_RETRY:
-        return "retry"
+    if state.get("retry_feedback"):
+        if state.get("retry_count", 0) < MAX_RETRY:
+            return "retry"
+        else:
+            return "end"
     
-    return "end"
+    # Query resolved -> End graph
+    if state.get("query_result"):
+        return "end"
+    
+    # Need more information from user
+    if state.get("Insufficient_data"):
+        return "request_info_node"
+
+    raise ValueError(
+         f"No route matched:{state}"
+    )
 
 
 def route_after_select_table(state : AgentState):
@@ -272,6 +307,7 @@ def route_after_select_table(state : AgentState):
 
     return "get_table_schema"
 
+
 graph = StateGraph(AgentState)
 
 # Adding nodes to the graph
@@ -279,6 +315,7 @@ graph.add_node("select_table_node", select_table_node)
 graph.add_node("unknown_intent_node", unknown_intent_node)
 graph.add_node("get_table_schema",get_table_schema)
 graph.add_node("final_node", final_node)
+graph.add_node("request_info_node", request_info_node)
 
 # Adding Edges
 graph.add_edge(START, "select_table_node")
@@ -296,18 +333,41 @@ graph.add_conditional_edges(
     route_after_final,
     {
         "retry" : "select_table_node",
+        "request_info_node" : "request_info_node",
         "end" : END
     }
 )
 
-update_graph = graph.compile()
+graph.add_edge("request_info_node", "final_node") 
+
+update_graph = graph.compile(checkpointer=InMemorySaver())
 
 async def invoke_update_delete_agent(user_query : str):
    
     input_msg = {"user_query" : user_query}
-    response = await update_graph.ainvoke(input_msg)    
+    response = await update_graph.ainvoke(input_msg, config=graph_config, version="v2") 
+   
+    if not response.interrupts:
+        return {
+            "query_result" : response.value.get("query_result", None),
+            "retry_feedback" : response.value.get("retry_feedback", None),
+            "Insufficient_data" : response.value.get("Insufficient_data")
+        }
+    
+    while response.interrupts:
+        print("="*100)
+        graph_interrupts = response.interrupts[0].value
+        print("Graph interrupts:", graph_interrupts)
+        updated_input = input("enter requested details:")
+
+        response = await update_graph.ainvoke(
+            Command(resume= updated_input),
+            config=graph_config,
+            version="v2"
+        )
+
     return {
-        "query_result" : response.get("query_result", None),
-        "retry_feedback" : response.get("retry_feedback", None),
-        "Insufficient_data" : response.get("Insufficient_data")
+        "query_result" : response.value.get("query_result", None),
+        "retry_feedback" : response.value.get("retry_feedback", None),
+        "Insufficient_data" : response.value.get("Insufficient_data")
     }
