@@ -31,21 +31,29 @@ Before execution verify:
     - Is the query syntactically valid?
     
 Execution Rules (Strict)
-    - Once confident, call run_db_query.
+    - Once confident, call run_query.
     - Always attempt query generation before returning retry_feedback when sufficient information exists.
     - Do not give generic answers without proper justification like returning generic answer as query result without taking any action(tool invocation).
 
 Output Rules 
-    - The 'run_db_query' tool may return responses from a Human-In-The-Loop (HITL) reviewer.
+    - The 'run_query' tool may return responses from a Human-In-The-Loop (HITL) reviewer.
     - These responses are NOT tool errors, NOT SQL errors, and NOT execution failures.
+    
     - If run_db_query_query tool respond with content beginning with:
         1. HUMAN REVIEW REJECTED: 
         - set query_result = Update operation rejected by human reviewer. Reason: <tool_message content>.
         2. HUMAN REVIEW RESPONSE: 
         - set query_result = Update operation responded by human reviewer. Reason: <tool_message content>.
         3. End processing immediately.
+
+    - If nothing in user_query maps directly or semantically to the provided schema, set no_schema_match.
+
+    - If at least one element maps to the schema but required update details are missing, 
+      set Insufficient_data and ask only for the missing details.
+      
+    - Any valid schema match must take precedence over retry_feedback.
     - Final answer should be in natural langauge
-   
+
 Error Handling
     1. If SQL syntax or logical error occurs:
         - Analyze the error.
@@ -59,7 +67,4 @@ Error Handling
         - Do NOT retry.
         - Set query_result to the error message.
 
-    4. Schema not relevant(if tables, columns not relevant to user_query):
-        - query_result = None
-        - retry_feedback = Justification explaining why the schema cannot satisfy the request.
-
+    

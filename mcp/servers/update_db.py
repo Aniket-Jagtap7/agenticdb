@@ -68,13 +68,20 @@ def update_to_count_query(update_sql):
 
 @mcp.tool()
 async def count_rows(query : str):
-    read_query = update_to_count_query(query)
-    row_count = await db.run_db_query(read_query)
-    #row_count = await update_data(read_query)
-    return f"{row_count[0][0]} rows will be affected"
+    try:
+        read_query = update_to_count_query(query)
+        row_count = await db.run_db_query(read_query)
+        if type(row_count) != str:
+            return f"{row_count['query_result'][0][0]} rows will be affected"
+        else:
+            return row_count
+            
+    except Exception as e:
+        return f"Error:{e}"
+
 
 @mcp.tool() 
-async def run_db_query(query : str):
+async def run_query(query : str):
     '''
         Use this tool for executing sql query. 
     '''
