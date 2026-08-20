@@ -64,7 +64,13 @@ events = {
     "write_db_data" : "Agent working..",
     "get_tables" : "Selecting source..",
     "get_columns" : "fetching schema..",
-    "direct_execute_query" : "fethcing data from source.."
+    "direct_execute_query" : "fethcing data from source..",
+    "employees" : "Records adding",
+    "salaries" : "Records adding",
+    "departments" : "Records adding",
+    "deparment_employees" : "Records adding",
+    "titles" : "Records adding",
+    "manager_of_departments" : "Records adding"
 }
 
 async def main():
