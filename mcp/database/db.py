@@ -20,7 +20,7 @@ class Database:
                     pool_name="mcp_pool",
                     pool_size=20,
                     pool_reset_session=True,
-                    host="localhost",
+                    host= os.getenv("host"),
                     user=os.getenv("user"),
                     password=os.getenv("password"),
                     database=os.getenv("database"),
@@ -59,9 +59,11 @@ class Database:
             with conn.cursor(buffered=True) as cursor:
                 if value is not None:
                     cursor.execute(query, value)
+                    print(f"Executed:{query},{value}")
                 else:
                     cursor.execute(query)
-
+                    print("Executed query:", query)
+                    
                 query_type = query.strip().split()[0].lower()
 
                 if query_type in (
@@ -151,20 +153,27 @@ class Database:
 
 
     async def run_db_query(self, query: str, value=None):
-
-        return await asyncio.to_thread(
-            self.execute_query,
-            query,
-            value
-        )
+        try:
+            print("Executing query:", query)
+            return await asyncio.to_thread(
+                self.execute_query,
+                query,
+                value
+            )
+        
+        except Exception as e:
+            return f"Error:{e}"
 
 
     async def run_admin_query(self, query: str, value=None):
-        return await asyncio.to_thread(
-            self.execute_admin_query,
-            query,
-            value
-        )
-
+        try:
+            return await asyncio.to_thread(
+                self.execute_admin_query,
+                query,
+                value
+            )
+        
+        except Exception as e:
+            return f"Error:{e}"
 
 db = Database()

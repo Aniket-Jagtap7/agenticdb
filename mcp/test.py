@@ -1,11 +1,14 @@
 from database.db import db
 import asyncio
-from servers.admin_tools import get_processlist
+from servers.update_db import count_rows
 
 
+query = "UPDATE titles SET title = 'Senior Engineer' WHERE emp_no = 500026;"
 
-res = asyncio.run(get_processlist())
+res = asyncio.run(count_rows(query=query))
+
 print(res)
+
 
 
 
