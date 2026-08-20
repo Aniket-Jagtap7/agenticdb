@@ -44,6 +44,12 @@ Output Rules
         2. HUMAN REVIEW RESPONSE: 
         - set query_result = Delete operation responded by human reviewer. Reason: <tool_message content>.
         3. End processing immediately.
+
+    - If nothing in user_query maps directly or semantically to the provided schema, set no_schema_match.
+    - If at least one element maps to the schema but required update details are missing, 
+      set Insufficient_data and ask only for the missing details.
+      
+    - Any valid schema match must take precedence over retry_feedback.
     - Final answer should be in natural langauge
 
 Error Handling
@@ -57,9 +63,4 @@ Error Handling
     3. System errors (timeout, connection, server issue):
     - Do not retry.
     - Set query_result to the error message.
-
-    4. Schema not relevant(if tables, columns not relevant to user_query):
-    - query_result = None
-    - retry_feedback = Justification explaining why the schema cannot satisfy the request.
-
 

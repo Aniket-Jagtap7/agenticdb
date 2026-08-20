@@ -28,7 +28,7 @@ class AgentState(TypedDict):
     table : list[str] | None = None
     schema : list
     query_result : str | None = None
-    retry_feedback : str | None = None
+    no_schema_match : str | None = None
     Insufficient_data : str | None = None 
     retry_count : int 
     Intent : str
@@ -45,7 +45,7 @@ class TableOutput(BaseModel):
 
 class QueryOutput(BaseModel):
     query_result : str | None = None
-    retry_feedback : str | None = None
+    no_schema_match : str | None = None
     Insufficient_data : str | None = None
     
 
@@ -79,7 +79,7 @@ async def select_table_node(state : AgentState):
         return {
             "table" : response.table,
             "Intent" : response.Intent,
-            "retry_feedback": ""
+            "no_schema_match": ""
         }
     
     except Exception as e:
@@ -172,7 +172,7 @@ async def final_node(state : AgentState):
 
             return {
                 "query_result": structured.query_result if structured else None,
-                "retry_feedback": structured.retry_feedback if structured else None,
+                "no_schema_match": structured.no_schema_match if structured else None,
                 "Insufficient_data": structured.Insufficient_data if structured else None,
                 "retry_count" : state.get("retry_count", 0) + 1
             }
@@ -260,7 +260,7 @@ async def final_node(state : AgentState):
        
         return {
             "query_result" : structured.query_result if structured else None,
-            "retry_feedback" : structured.retry_feedback if structured else None,
+            "no_schema_match" : structured.no_schema_match if structured else None,
             "Insufficient_data" : structured.Insufficient_data if structured else None,
             "retry_count" : state.get("retry_count", 0) + 1
         }
@@ -282,7 +282,7 @@ def request_info_node(state : AgentState):
 # Conditional Edges
 MAX_RETRY = 2
 def route_after_final(state: AgentState):
-    if state.get("retry_feedback"):
+    if state.get("no_schema_match"):
         if state.get("retry_count", 0) < MAX_RETRY:
             return "retry"
         else:
@@ -350,7 +350,7 @@ async def invoke_update_delete_agent(user_query : str):
     if not response.interrupts:
         return {
             "query_result" : response.value.get("query_result", None),
-            "retry_feedback" : response.value.get("retry_feedback", None),
+            "no_schema_match" : response.value.get("no_schema_match", None),
             "Insufficient_data" : response.value.get("Insufficient_data")
         }
     
@@ -368,6 +368,6 @@ async def invoke_update_delete_agent(user_query : str):
 
     return {
         "query_result" : response.value.get("query_result", None),
-        "retry_feedback" : response.value.get("retry_feedback", None),
+        "no_schema_match" : response.value.get("no_schema_match", None),
         "Insufficient_data" : response.value.get("Insufficient_data")
     }

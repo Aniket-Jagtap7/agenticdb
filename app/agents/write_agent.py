@@ -29,9 +29,9 @@ class AgentState(TypedDict):
     tool : list[str]
     tool_schema : list
     query_result : str | None = None
-    retry_feedback : str | None = None
+    no_schema_match : str | None = None
     Insufficient_data : str | None = None
-    call_limit : str | None = None
+    retry_count : int
     revised_input : Annotated[list[str], add]
 
 class Tool_Node_Output(BaseModel):
@@ -39,7 +39,7 @@ class Tool_Node_Output(BaseModel):
 
 class QueryOutput(BaseModel):
     query_result : str | None = None
-    retry_feedback : str | None = None
+    no_schema_match : str | None = None
     Insufficient_data : str | None = None
 
 
@@ -67,7 +67,10 @@ async def select_tool_node(state : AgentState):
 
     try:
         response = await model.ainvoke(msg)
-        return {"tool" : response.tool}
+        return {
+            "tool" : response.tool,
+            "retry_count" : state.get("retry_count", 0) + 1
+        }
     
     except Exception as e:
         return  f"Error:{str(e)}"
@@ -140,7 +143,7 @@ async def  final_node(state : AgentState):
 
             return {
                 "query_result": structured.query_result if structured else None,
-                "retry_feedback": structured.retry_feedback if structured else None,
+                "no_schema_match": structured.no_schema_match if structured else None,
                 "Insufficient_data": structured.Insufficient_data if structured else None,
             }
         
@@ -229,7 +232,7 @@ async def  final_node(state : AgentState):
     
         return {
             "query_result" : structured.query_result if structured else None,
-            "retry_feedback" : structured.retry_feedback if structured else None,
+            "no_schema_match" : structured.no_schema_match if structured else None,
             "Insufficient_data" : structured.Insufficient_data if structured else None,
         }
     
@@ -247,6 +250,8 @@ def request_info_node(state : AgentState):
     }
 
 
+MAX_RETRY = 2
+
 def route_after_final_node(state: AgentState):
     # Query resolved -> End graph
     if state.get("query_result"):
@@ -257,9 +262,12 @@ def route_after_final_node(state: AgentState):
         return "request_info_node"
 
     # Retry with feedback
-    if state.get("retry_feedback"):
-        return "request_info_node"
-
+    if state.get("no_schema_match"):
+        if state.get("retry_count", 0) < MAX_RETRY:
+            return "select_tool_node"
+        else:
+            return "end"
+        
     raise ValueError(
         f"No route matched:{state}"
     )
@@ -298,7 +306,7 @@ async def invoke_write_agent(user_query : str):
     if not response.interrupts:   
         return {
             "query_result" : response.value.get("query_result", None),
-            "retry_feedback" : response.value.get("retry_feedback", None),
+            "no_schema_match" : response.value.get("no_schema_match", None),
             "Insufficient_data" : response.value.get("Insufficient_data")
         } 
     
@@ -316,7 +324,7 @@ async def invoke_write_agent(user_query : str):
      
     return {
         "query_result" : response.value.get("query_result", None),
-        "retry_feedback" : response.value.get("retry_feedback", None),
+        "no_schema_match" : response.value.get("no_schema_match", None),
         "Insufficient_data" : response.value.get("Insufficient_data")
     }
 
