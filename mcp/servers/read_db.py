@@ -1,8 +1,11 @@
 from fastapi import Query, HTTPException, APIRouter
 from fastmcp import FastMCP
 from utils.schema import Entities
-import re
 from database.db import db
+from pathlib import Path
+import csv
+import uuid
+
 
 # creates MCP server
 mcp = FastMCP("Read_Database")
@@ -13,12 +16,11 @@ router = APIRouter()
 # Fetching tables schema from schema.py
 Table_Scehma = Entities()
 
-@router.get("/")
-def root():
-    return {"status": "running"}
+# folder for stroring the csv files
+dir_path = Path("/home/ubuntu/DB_Project/mcp/csv_data/")
+dir_path.mkdir(exist_ok=True)
 
 
-#@router.get("/tables")
 @mcp.tool()
 async def get_tables():
     """ 
@@ -50,6 +52,7 @@ async def get_columns(name: list[str] = Query(...)):
         return f"Error:{str(e)}"
 
 
+
 BLOCKED_KEYWORDS = [
     "information_schema",
     "mysql.",
@@ -62,28 +65,6 @@ BLOCKED_KEYWORDS = [
     "into dumpfile"
 ]
 
-AGGREGATE_FUNCTIONS = [
-    "count(",
-    "sum(",
-    "avg(",
-    "min(",
-    "max("
-]
-
-DEFAULT_LIMIT = 10
-MAX_LIMIT = 100
-
-def add_limit_if_missing(query: str) -> str:
-    """
-    Adds LIMIT 100 to non-aggregate queries when LIMIT is not present.
-    """
-
-    normalized = query.lower()
-    if re.search(r"\blimit\s+\d+\b", normalized):
-        return query
-
-    return query.rstrip(" ;") + f" LIMIT {DEFAULT_LIMIT}"
-
 
 def validate_query(query): 
     """
@@ -91,6 +72,7 @@ def validate_query(query):
             (True, message, updated_query)  -> Query should be blocked
             (False, message, updated_query) -> Query is allowed
     """
+
     if not query or not query.strip():
         return False, "Query cannot be empty.", None
 
@@ -104,58 +86,20 @@ def validate_query(query):
     if any(keyword in normalized for keyword in BLOCKED_KEYWORDS):
         return False, "Query contains restricted keywords.", None
 
-    # Block SELECT *
-    if re.search(r"\bselect\s+\*", normalized):
-        return False, "SELECT * is not allowed. Please specify column names, with limit clause", None
-
-    # Block alias.* (e.g. e.*, emp.*)
-    if re.search(r"\b\w+\.\*", normalized):
-        return False, "table.* syntax is not allowed. Please specify column names.", None
-
-    # Validate LIMIT if present
-    limit_match = re.search(r"\blimit\s+(\d+)\b", normalized)
-
-    if limit_match:
-            limit_value = int(limit_match.group(1))
-
-            # Reduce excessive LIMIT
-            if limit_value > MAX_LIMIT:
-                updated_query = re.sub(
-                            r"\blimit\s+\d+\b",
-                            f"LIMIT {MAX_LIMIT}",
-                            query,
-                            flags=re.IGNORECASE
-                        )
-
-                return (
-                            True,
-                            f"LIMIT exceeded maximum. Reduced to {MAX_LIMIT}.",
-                            updated_query
-                        )
-
-   # Check aggregate query
-    has_aggregate = any(func in normalized for func in AGGREGATE_FUNCTIONS)
-
-    # Non-aggregate query without LIMIT
-    if not has_aggregate and not limit_match:
-        updated_query = add_limit_if_missing(query)
-        return (
-                    True,
-                    f"LIMIT {DEFAULT_LIMIT} added automatically.",
-                    updated_query
-                )
     # Query valid and unchanged
     return True, "Query is valid.", None
   
 
-#@router.get("/query")
+
 @mcp.tool()
 async def direct_execute_query(query:str):
     """
         Takes sql(MySQL) query as input in string fromat.
         By using table and columns Build sql query according users intent pass as a string.
     """
+
     print("*"*20," direct executing query","*"*20)
+
     is_valid , message, modified_query = validate_query(query)   
     
     if not is_valid:
@@ -163,10 +107,26 @@ async def direct_execute_query(query:str):
     else:
         try:    
             final_query = modified_query if modified_query else query
-            print("final_query:", final_query)
+            
             res = await db.run_db_query(final_query)
-            print(res) 
-            return str(res)
+
+            if len(res["query_result"]) >= 10:
+                
+                file_name = f"query_result_{uuid.uuid4().hex}.csv"
+                file_path = dir_path / file_name
+
+                with open(file_path, "w", encoding="utf-8", newline="") as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=res["query_result"][0].keys()) # columns
+                    writer.writeheader() # first row
+                    writer.writerows(res["query_result"]) # remaining rows
+
+                return {
+                    "message" : f"fetched {len(res["query_result"])} rows. Result of query is availabe in provided csv file",
+                    "file_path" : file_path 
+                }
+
+            else:
+                return res
    
         except Exception as e:
                 error_message = f"DB_ERROR: {str(e)}"

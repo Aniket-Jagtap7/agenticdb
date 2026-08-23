@@ -56,7 +56,7 @@ class Database:
         try:
             conn = self._pool.get_connection()
 
-            with conn.cursor(buffered=True) as cursor:
+            with conn.cursor(buffered=True, dictionary=True) as cursor:
                 if value is not None:
                     cursor.execute(query, value)
                     print(f"Executed:{query},{value}")
@@ -83,7 +83,7 @@ class Database:
                         pass
 
                     return {
-                        "query_result": result[-1:-7:-1],
+                        "query_result": result,
                         "warnings": warnings[:10]
                     }
 
