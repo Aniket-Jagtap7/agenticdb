@@ -6,6 +6,7 @@ from agents.read_agent import invoke_read_agent
 from agents.update_agent import invoke_update_delete_agent
 from agents.write_agent import invoke_write_agent
 from utils.llm import get_llm
+from utils.prompt_loader import load_prompt
 
 
 llm = get_llm(streaming=True)
@@ -55,7 +56,7 @@ agent = create_agent(name="main_agent",
                     )
 
 
-system_prompt = SystemMessage(content="You are helpful Database Assistant. Use attahced tools when you need answeer query. Your task is read the user query carefully and pass to tool in simple and clean natural langauge")
+system_prompt = SystemMessage(content=load_prompt("orchestrator_agent.txt"))
 
 async def invoke_main_agent(user_query : str):
     

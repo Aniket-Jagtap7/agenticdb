@@ -22,6 +22,7 @@ events = {
 }
 
 
+
 @app.websocket("/chat")
 async def user_chat(websocket : WebSocket):
     
@@ -61,6 +62,9 @@ async def user_chat(websocket : WebSocket):
 
     except WebSocketDisconnect:
         print("client closed")
+
+    except Exception as e:
+        print("Error:",e)
 
 
 

@@ -48,5 +48,6 @@ Your task:
     - Final output must come ONLY via execute_query tool
     - Do NOT return raw SQL
     - Do NOT include explanations
+    - if tool result with message fetched <no.of> rows. Result of query is availabe in provided csv file", return the query_result including file path.
     - Convert final result into a natural language answer aligned with the user query and return in string format.
     - Do NOT return raw tool output directly
