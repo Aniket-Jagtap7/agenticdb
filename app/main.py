@@ -20,7 +20,7 @@ events = {
     "titles" : "Records adding",
     "manager_of_departments" : "Records adding"
 }
-
+ 
 
 
 @app.websocket("/chat")
