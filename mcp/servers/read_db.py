@@ -110,7 +110,7 @@ async def direct_execute_query(query:str):
             
             res = await db.run_db_query(final_query)
 
-            if len(res["query_result"]) >= 10:
+            if  type(res) != str and len(res["query_result"]) >= 10:
                 
                 file_name = f"query_result_{uuid.uuid4().hex}.csv"
                 file_path = dir_path / file_name
