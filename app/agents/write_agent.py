@@ -14,7 +14,8 @@ import uuid
 from utils.prompt_loader import load_prompt 
 from utils.llm import get_llm
 from utils.mcp_client import MCPTools
-
+from utils.hitl_context import request_human_input
+from utils.tool_decisions import build_tool_decisions
 
 # config ID's for interrupts
 thread_id = str(uuid.uuid4())
@@ -150,76 +151,43 @@ async def  final_node(state : AgentState):
         # CASE 2: Tool call → HITL flow
         while response.interrupts:
             
-            tables = [{table['name'] : table['args']['data']}for table in response.interrupts[0].value['action_requests']]
-            for table in tables:
-                print(table)
+            print(f"table {state.get("tool")} will be updated")
+            interrupt_value = response.interrupts[0].value
+            action_requests = interrupt_value.get("action_requests", [])
+            if not action_requests:
+                raise ValueError(
+                    "Tool-review interrupt does not contain any action requests."
+                )
             
-            print("="*100)
+            review_actions = []
 
-            decision = ['approve', 'edit', 'respond', 'reject']
-            while True:
-                user_input = input(" Enter Decision (approve/edit/respond/reject): ").strip().lower()
-                if user_input in decision:
-                    break
-                else:
-                    print("provide correct input!!!")
+            for action_index, action in enumerate(action_requests):
+                action_name = action.get("name", "unknown tool")
+                action_args = action.get("args", {})
+            
+                review_actions.append(
+                    {
+                        "action_index": action_index,
+                        "name": action_name,
+                        "args": action_args,
+                    }
+                )
+            print("review_actions:", review_actions)
+            review_payload = {
+                "type" : "tool_review",
+                "title" : "Human Review Required",
+                "message" : "Please review the following tool actions and provide your decision.",
+                "table" : ", ".join(state.get("tool")),
+                "actions" : review_actions
+            }
 
+            human_review = ( await request_human_input(review_payload))
+            print("Human review decision:", human_review)
+            
+            decisions = build_tool_decisions(action_requests=action_requests, human_review=human_review)
+            print("Tool decisions:", decisions)
         
-            interrupt = response.interrupts[0].value
-            decisions = []
-
-            for action in interrupt["action_requests"]:
-
-                if user_input == "respond":
-                    msg = input("Enter response message: ")
-                    decisions.append({
-                        "type": "respond",
-                        "action_name": action["name"],
-                        "message": msg
-                    })
-
-                elif user_input == "reject":
-                    msg = input("Enter rejection reason: ")
-                    decisions.append({
-                        "type": "reject",
-                        "action_name": action["name"],
-                        "message": msg
-                    })
-
-                elif user_input == "edit":
-                    original_args = action["args"]["data"].copy()
-
-                    print("Original Data:", original_args)
-                    print("Enter fields to update (leave blank to keep same)")
-
-                    updated_data = {}
-
-                    for key, value in original_args.items():
-                        new_val = input(f"{key} ({value}): ").strip()
-
-                        if new_val:
-                            updated_data[key] = new_val
-                        else:
-                            updated_data[key] = value  
-
-                    decisions.append({
-                        "type": "edit",
-                        "action_name": action["name"],
-                        "edited_action":{
-                            "name": action["name"],
-                            "args": {
-                                "data": updated_data
-                            }
-                        }
-                    })
-
-                else:  
-                    decisions.append({
-                        "type": "approve",
-                        "action_name": action["name"]
-                    })
-
-        
+            
             response = await agent.ainvoke(
                 Command(
                     resume = {"decisions": decisions},
@@ -314,7 +282,7 @@ async def invoke_write_agent(user_query : str):
         print("="*100)
         graph_interrupts = response.interrupts[0].value
         print("Graph interrupts:", graph_interrupts)
-        updated_input = input("enter requested details:")
+        updated_input = await request_human_input(graph_interrupts)
         
         response = await write_graph.ainvoke(
             Command(resume= updated_input),

@@ -4,21 +4,27 @@ from langchain.agents.middleware import  ModelCallLimitMiddleware, HumanInTheLoo
 from langgraph.graph import END, StateGraph , START
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command, interrupt
-from typing import TypedDict, Annotated
+from typing import TypedDict, Annotated, Any, Awaitable, Callable
 from operator import add
 from pydantic import BaseModel
 from enum import Enum
 import asyncio
 import uuid
+import json
 from utils.prompt_loader import load_prompt
 from utils.llm import get_llm
 from utils.mcp_client import MCPTools
+from utils.hitl_context import request_human_input
+from utils.tool_decisions import build_tool_decisions
 from langchain.tools import tool
+ 
 
 # config ID's for interrupts
 thread_id = str(uuid.uuid4())
 agent_config = {"configurable": {"thread_id": f"agent_{thread_id}"}}
 graph_config = {"configurable" : {"thread_id": f"graph_{thread_id}"}}
+
+HumanInputCallback = Callable[[Any],Awaitable[Any]]
 
 # LLM initialization
 llm = get_llm()
@@ -181,73 +187,57 @@ async def final_node(state : AgentState):
         while response.interrupts:
             
             print(f"table {state.get("table")} will be updated")
-            tools = [tool for tool in response.interrupts[0].value['action_requests']]
-
-            for tool in tools:
-                risk = await risk_analyzer(tool['args'])
-                print("Approximately,", risk[0]['text'])
+            interrupt_value = response.interrupts[0].value
+            action_requests = interrupt_value.get("action_requests", [])
+            if not action_requests:
+                raise ValueError(
+                    "Tool-review interrupt does not contain any action requests."
+                )
             
-            decision = ['approve', 'edit', 'respond', 'reject']
+            review_actions = []
 
-            while True:
-                user_input = input(" Enter Decision (approve/edit/respond/reject): ").strip().lower()
-                if user_input in decision:
-                    break
-                else:
-                    print("provide correct input!!!")
+            for action_index, action in enumerate(action_requests):
+                action_name = action.get("name", "unknown tool")
+                action_args = action.get("args", {})
+                default_risk_message = ("Risk analysis unavailable.")
+                risk_message = default_risk_message
 
-            interrupt = response.interrupts[0].value
-            decisions = []
+                try:
+                    risk_result = await risk_analyzer(action_args)
+                    print("risk_result:", risk_result)
+                    if risk_result:
+                        first_risk = risk_result[0]
+                        if isinstance(first_risk, dict):
+                            risk_message = first_risk.get("text", default_risk_message)
 
-            for action in interrupt["action_requests"]:
-                if user_input == "respond":
-                    msg = input("Enter response message: ")
-                    decisions.append({
-                        "type": "respond",
-                        "action_name": action["name"],
-                        "message":  f"HUMAN REVIEW RESPONSE: {msg}"
-                    })
-
-                elif user_input == "reject":
-                    msg = input("Enter rejection reason: ")
-                    decisions.append({
-                        "type": "reject",
-                        "action_name": action["name"],
-                        "message": f"HUMAN REVIEW REJECTED: {msg}"
-                    })
-
-                elif user_input == "edit":
-                    
-                    original_args = action["args"].copy()
-
-                    print("Original Data:", original_args)
-                    print("Enter fields to update (leave blank to keep same)")
-
-                    updated_data = {}
-
-                    for key, value in original_args.items():
-                        new_val = input(f"{key} ({value}): ").strip()
-
-                        if new_val:
-                            updated_data[key] = new_val
-                        else:
-                            updated_data[key] = value  
-
-                            decisions.append({
-                                "type": "edit",
-                                "action_name": action["name"],
-                                "edited_action":{
-                                    "name": action["name"],
-                                    "args": updated_data
-                                }
-                            })
-
-                else:  
-                    decisions.append({
-                        "type": "approve",
-                        "action_name": action["name"]
-                    })
+                except Exception as risk_error:
+                    print("risk analyzer failed:", risk_error)
+                    risk_message = default_risk_message
                 
+                review_actions.append(
+                    {
+                        "action_index": action_index,
+                        "name": action_name,
+                        "args": action_args,
+                        "risk_analysis": risk_message
+                    }
+                )
+            print("review_actions:", review_actions)
+            review_payload = {
+                "type" : "tool_review",
+                "title" : "Human Review Required",
+                "message" : "Please review the following tool actions and provide your decision.",
+                "table" : state.get("table"),
+                "actions" : review_actions
+            }
+
+            human_review = ( await request_human_input(review_payload))
+            print("Human review decision:", human_review)
+            
+            decisions = build_tool_decisions(action_requests=action_requests, human_review=human_review)
+            print("Tool decisions:", decisions)
+        
+            
             response = await agent.ainvoke(
                 Command(
                     resume = {"decisions": decisions},
@@ -255,9 +245,9 @@ async def final_node(state : AgentState):
                 config=agent_config,
                 version="v2",
             )
-               
+            
         structured = response.value.get("structured_response")
-       
+    
         return {
             "query_result" : structured.query_result if structured else None,
             "no_schema_match" : structured.no_schema_match if structured else None,
@@ -358,7 +348,8 @@ async def invoke_update_delete_agent(user_query : str):
         print("="*100)
         graph_interrupts = response.interrupts[0].value
         print("Graph interrupts:", graph_interrupts)
-        updated_input = input("enter requested details:")
+        #updated_input = input("enter requested details:")
+        updated_input = await request_human_input(graph_interrupts)
         response = await update_graph.ainvoke(
             Command(resume= updated_input),
             config=graph_config,
