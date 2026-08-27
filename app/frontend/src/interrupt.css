@@ -1,12 +1,13 @@
+/* Common HITL overlay */
 .interrupt-overlay {
     position: fixed;
-    z-index: 1000;
     inset: 0;
+    z-index: 1000;
     display: grid;
     place-items: center;
     padding: 20px;
-    background: rgb(15 23 42/68%);
-    backdrop-filter: blur(5px)
+    background: rgb(15 23 42 / 68%);
+    backdrop-filter: blur(5px);
 }
 
 .interrupt-modal {
@@ -16,14 +17,14 @@
     padding: 26px;
     border: 1px solid #e2e8f0;
     border-radius: 22px;
-    background: #fff;
-    box-shadow: 0 30px 80px rgb(15 23 42/32%)
+    background: #ffffff;
+    box-shadow: 0 30px 80px rgb(15 23 42 / 32%);
 }
 
 .interrupt-header {
     display: flex;
     align-items: flex-start;
-    gap: 14px
+    gap: 14px;
 }
 
 .interrupt-icon {
@@ -35,13 +36,13 @@
     justify-content: center;
     color: #7c3aed;
     border-radius: 16px;
-    background: #f3e8ff
+    background: #f3e8ff;
 }
 
 .interrupt-header h2 {
     margin: 1px 0 7px;
     color: #172033;
-    font-size: 21px
+    font-size: 21px;
 }
 
 .interrupt-header p {
@@ -50,21 +51,7 @@
     font-size: 14px;
     line-height: 1.65;
     white-space: pre-wrap;
-    overflow-wrap: anywhere
-}
-
-.interrupt-details {
-    max-height: 220px;
-    overflow: auto;
-    margin: 18px 0 0;
-    padding: 14px;
-    color: #334155;
-    font-size: 12px;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    border: 1px solid #e2e8f0;
-    border-radius: 13px;
-    background: #f8fafc
+    overflow-wrap: anywhere;
 }
 
 .interrupt-textarea {
@@ -77,236 +64,324 @@
     font: inherit;
     border: 1px solid #cbd5e1;
     border-radius: 13px;
-    outline: none
+    outline: none;
 }
 
 .interrupt-textarea:focus {
     border-color: #7c3aed;
-    box-shadow: 0 0 0 3px rgb(124 58 237/12%)
+    box-shadow: 0 0 0 3px rgb(124 58 237 / 12%);
 }
 
 .interrupt-actions {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    margin-top: 18px
+    margin-top: 18px;
 }
 
 .interrupt-button {
     padding: 11px 17px;
     font-size: 13px;
     font-weight: 700;
-    border-radius: 12px
+    border-radius: 12px;
+    cursor: pointer;
 }
 
 .interrupt-button-primary {
-    color: #fff;
+    color: #ffffff;
     border: 1px solid #7c3aed;
-    background: #7c3aed
+    background: #7c3aed;
 }
 
 .interrupt-button-primary:hover:not(:disabled) {
-    background: #6d28d9
-}
-
-.interrupt-button-secondary {
-    color: #475569;
-    border: 1px solid #cbd5e1;
-    background: #fff
-}
-
-.interrupt-button-secondary:hover {
-    background: #f8fafc
+    background: #6d28d9;
 }
 
 .interrupt-button:disabled {
-    opacity: .48;
-    cursor: not-allowed
+    opacity: 0.48;
+    cursor: not-allowed;
 }
 
+/* Tool review modal */
 .tool-review-modal {
-    width: min(780px, 100%)
+    width: min(820px, 100%);
 }
 
-.tool-review-table {
+.tool-target-table {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
     margin-top: 18px;
-    padding: 10px 13px;
-    color: #475569;
-    font-size: 13px;
-    border-radius: 11px;
-    background: #f1f5f9
+    padding: 12px 14px;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #eff6ff;
 }
 
-.tool-review-actions-list {
+.tool-target-table span {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.tool-target-table strong {
+    color: #1d4ed8;
+    font-size: 14px;
+}
+
+.tool-review-action-list {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    margin-top: 18px
+    gap: 16px;
+    margin-top: 18px;
 }
 
-.tool-review-action-card {
-    padding: 17px;
+.tool-review-card {
+    padding: 18px;
     border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    background: #fff
+    border-radius: 17px;
+    background: #ffffff;
+    box-shadow: 0 3px 12px rgb(15 23 42 / 5%);
 }
 
-.tool-review-action-header {
+.tool-review-card-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 15px
+    gap: 15px;
 }
 
-.tool-review-number {
+.tool-action-number {
+    display: block;
     color: #64748b;
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: .08em;
-    text-transform: uppercase
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
-.tool-review-action-header h3 {
+.tool-review-card-header h3 {
     margin: 4px 0 0;
     color: #172033;
-    font-size: 16px
+    font-size: 17px;
 }
 
-.tool-risk-label {
+.tool-risk-badge {
     flex-shrink: 0;
-    padding: 5px 8px;
+    padding: 5px 9px;
     color: #9a3412;
     font-size: 11px;
     font-weight: 700;
     border-radius: 999px;
-    background: #ffedd5
+    background: #ffedd5;
 }
 
-.tool-risk-message {
-    margin: 12px 0 0;
+.tool-risk-content {
+    margin-top: 13px;
+    padding: 11px 13px;
+    color: #7c2d12;
+    font-size: 13px;
+    line-height: 1.6;
+    border-left: 4px solid #fb923c;
+    border-radius: 8px;
+    background: #fff7ed;
+}
+
+.tool-section-title {
+    margin: 18px 0 10px;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* Read-only arguments */
+.tool-arguments-display {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.tool-argument-row {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 11px;
+    background: #f8fafc;
+}
+
+.tool-argument-name {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.tool-argument-value {
+    overflow: hidden;
+    color: #172033;
+    font-size: 14px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tool-empty-arguments {
+    padding: 13px;
     color: #64748b;
     font-size: 13px;
-    line-height: 1.6
+    text-align: center;
+    border: 1px dashed #cbd5e1;
+    border-radius: 11px;
 }
 
-.original-arguments {
-    margin-top: 14px
-}
-
-.original-arguments h4 {
-    margin: 0 0 8px;
-    color: #475569;
-    font-size: 12px
-}
-
-.decision-selector {
+/* Edit fields */
+.tool-edit-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 9px;
-    margin-top: 20px
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
 }
 
-.decision-button {
-    padding: 11px 10px;
+.tool-edit-field {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.tool-edit-label {
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.tool-edit-field input,
+.tool-edit-field select {
+    width: 100%;
+    height: 42px;
+    padding: 9px 11px;
+    color: #172033;
+    font: inherit;
+    font-size: 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    outline: none;
+    background: #ffffff;
+}
+
+.tool-edit-field input:focus,
+.tool-edit-field select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 11%);
+}
+
+.tool-edit-field input::placeholder {
+    color: #94a3b8;
+    opacity: 1;
+}
+
+.tool-edit-field small {
+    overflow: hidden;
+    color: #64748b;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Decision buttons */
+.tool-decision-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 22px;
+}
+
+.tool-decision-button {
+    padding: 12px 10px;
     color: #475569;
     font-size: 13px;
     font-weight: 700;
     border: 1px solid #cbd5e1;
     border-radius: 12px;
-    background: #fff
+    background: #ffffff;
+    cursor: pointer;
+    transition: color 140ms ease, border-color 140ms ease, background 140ms ease, transform 140ms ease;
 }
 
-.decision-button-selected {
-    color: #fff
+.tool-decision-button:hover {
+    transform: translateY(-1px);
 }
 
-.decision-approve.decision-button-selected {
+.tool-decision-selected {
+    color: #ffffff;
+}
+
+.tool-approve-button.tool-decision-selected {
     border-color: #16a34a;
-    background: #16a34a
+    background: #16a34a;
 }
 
-.decision-edit.decision-button-selected {
+.tool-edit-button.tool-decision-selected {
     border-color: #2563eb;
-    background: #2563eb
+    background: #2563eb;
 }
 
-.decision-respond.decision-button-selected {
+.tool-respond-button.tool-decision-selected {
     border-color: #7c3aed;
-    background: #7c3aed
+    background: #7c3aed;
 }
 
-.decision-reject.decision-button-selected {
+.tool-reject-button.tool-decision-selected {
     border-color: #dc2626;
-    background: #dc2626
+    background: #dc2626;
 }
 
-.decision-help {
+.tool-decision-message {
     margin-top: 15px;
-    padding: 11px 13px;
+    padding: 12px 14px;
     font-size: 13px;
-    line-height: 1.5;
-    border-radius: 11px
+    line-height: 1.55;
+    border-radius: 11px;
 }
 
-.approve-help {
+.tool-approve-message {
     color: #166534;
-    background: #dcfce7
+    background: #dcfce7;
 }
 
-.edit-help {
+.tool-edit-message {
     color: #1d4ed8;
-    background: #dbeafe
+    background: #dbeafe;
 }
 
-.edit-arguments {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 13px;
-    margin-top: 15px
-}
-
-.edit-field {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 6px
-}
-
-.edit-field>span {
-    color: #334155;
-    font-size: 12px;
-    font-weight: 700
-}
-
-.edit-field input {
-    width: 100%;
-    padding: 10px 11px;
-    color: #172033;
-    font: inherit;
-    border: 1px solid #cbd5e1;
-    border-radius: 10px;
-    outline: none
-}
-
-.edit-field input:focus {
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgb(37 99 235/10%)
-}
-
-.edit-field small {
-    overflow: hidden;
-    color: #64748b;
-    font-size: 11px;
-    text-overflow: ellipsis;
-    white-space: nowrap
-}
-
-@media(max-width:650px) {
-    .decision-selector {
-        grid-template-columns: repeat(2, 1fr)
+@media (max-width: 680px) {
+    .interrupt-overlay {
+        padding: 10px;
     }
 
-    .edit-arguments {
-        grid-template-columns: 1fr
+    .tool-review-modal {
+        padding: 20px;
+    }
+
+    .tool-arguments-display,
+    .tool-edit-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tool-decision-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tool-review-card-header {
+        flex-direction: column;
     }
 }

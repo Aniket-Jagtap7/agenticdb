@@ -181,7 +181,7 @@ async def  final_node(state : AgentState):
                 "actions" : review_actions
             }
 
-            human_review = ( await request_human_input(review_payload))
+            human_review =  await request_human_input(review_payload)
             print("Human review decision:", human_review)
             
             decisions = build_tool_decisions(action_requests=action_requests, human_review=human_review)

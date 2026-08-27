@@ -39,28 +39,207 @@ function ChatMessage({ message }) {
     );
 }
 
+function isPlainObject(value) {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function cloneValue(value) {
+    if (typeof globalThis.structuredClone === "function") {
+        return globalThis.structuredClone(value);
+    }
+    return JSON.parse(JSON.stringify(value));
+}
+
+function flattenToolArguments(value, parentPath = "", result = []) {
+    if (!isPlainObject(value)) return result;
+
+    Object.entries(value).forEach(([key, childValue]) => {
+        const path = parentPath ? `${parentPath}.${key}` : key;
+
+        if (isPlainObject(childValue)) {
+            flattenToolArguments(childValue, path, result);
+        } else {
+            result.push({ path, label: key, value: childValue });
+        }
+    });
+
+    return result;
+}
+
+function getValueAtPath(object, path) {
+    return path.split(".").reduce(
+        (current, key) => (current == null ? undefined : current[key]),
+        object,
+    );
+}
+
+function setValueAtPath(object, path, value) {
+    const result = cloneValue(object);
+    const keys = path.split(".");
+    let current = result;
+
+    keys.forEach((key, index) => {
+        if (index === keys.length - 1) {
+            current[key] = value;
+            return;
+        }
+
+        if (!isPlainObject(current[key])) current[key] = {};
+        current = current[key];
+    });
+
+    return result;
+}
+
+function convertEditedValue(enteredValue, originalValue) {
+    if (typeof originalValue === "number") {
+        const numberValue = Number(enteredValue);
+        return Number.isNaN(numberValue) ? originalValue : numberValue;
+    }
+
+    if (typeof originalValue === "boolean") {
+        return enteredValue === true || enteredValue === "true";
+    }
+
+    if (originalValue === null) return enteredValue === "" ? null : enteredValue;
+
+    if (Array.isArray(originalValue)) {
+        try {
+            return JSON.parse(enteredValue);
+        } catch {
+            return originalValue;
+        }
+    }
+
+    return enteredValue;
+}
+
+function humanizeFieldName(fieldName) {
+    return fieldName
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function getInputType(fieldName, value) {
+    const normalizedName = fieldName.toLowerCase();
+
+    if (
+        normalizedName.includes("date") &&
+        typeof value === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ) {
+        return "date";
+    }
+
+    if (typeof value === "number") return "number";
+    return "text";
+}
+
+function ToolArgumentDisplay({ action }) {
+    const fields = flattenToolArguments(action.args || {});
+
+    if (!fields.length) {
+        return <div className="tool-empty-arguments">No tool arguments were provided.</div>;
+    }
+
+    return (
+        <div className="tool-arguments-display">
+            {fields.map((field) => (
+                <div className="tool-argument-row" key={field.path}>
+                    <span className="tool-argument-name">
+                        {humanizeFieldName(field.label)}
+                    </span>
+                    <span className="tool-argument-value" title={displayText(field.value)}>
+                        {displayText(field.value)}
+                    </span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function ToolEditForm({ action, editedValues, onChange }) {
+    const fields = flattenToolArguments(action.args || {});
+
+    return (
+        <div className="tool-edit-grid">
+            {fields.map((field) => {
+                const currentValue = editedValues[field.path] ?? "";
+                const originalText = displayText(field.value);
+
+                if (typeof field.value === "boolean") {
+                    return (
+                        <label className="tool-edit-field" key={field.path}>
+                            <span className="tool-edit-label">
+                                {humanizeFieldName(field.label)}
+                            </span>
+                            <select
+                                value={currentValue}
+                                title={`Current value: ${originalText}`}
+                                onChange={(event) =>
+                                    onChange(action.name, field.path, event.target.value)
+                                }
+                            >
+                                <option value="">Keep current value</option>
+                                <option value="true">True</option>
+                                <option value="false">False</option>
+                            </select>
+                            <small>Current value: {originalText}</small>
+                        </label>
+                    );
+                }
+
+                return (
+                    <label className="tool-edit-field" key={field.path}>
+                        <span className="tool-edit-label">
+                            {humanizeFieldName(field.label)}
+                        </span>
+                        <input
+                            type={getInputType(field.label, field.value)}
+                            value={currentValue}
+                            placeholder={originalText}
+                            title={`Current value: ${originalText}`}
+                            onChange={(event) =>
+                                onChange(action.name, field.path, event.target.value)
+                            }
+                        />
+                        <small>Leave blank to keep: {originalText}</small>
+                    </label>
+                );
+            })}
+        </div>
+    );
+}
+
 function InterruptDialog({ request, input, setInput, submit }) {
     const [selectedDecision, setSelectedDecision] = useState("");
-    const [editedActions, setEditedActions] = useState({});
+    const [changedArguments, setChangedArguments] = useState({});
 
     useEffect(() => {
         setSelectedDecision("");
-        setEditedActions({});
+        setChangedArguments({});
         setInput("");
     }, [request, setInput]);
 
     if (!request) return null;
 
-    const value = request.value;
+    const interruptValue = request.value;
+    const isToolReview =
+        isPlainObject(interruptValue) &&
+        interruptValue.type === "tool_review" &&
+        Array.isArray(interruptValue.actions);
 
-    // Existing simple HITL input popup.
-    if (!value || typeof value === "string" || value.type !== "tool_review") {
-        const title = value?.title || "Additional information required";
+    if (!isToolReview) {
+        const title = interruptValue?.title || "Additional information required";
         const message =
-            typeof value === "string"
-                ? value
-                : value?.message || "The agent requires your input.";
-        const placeholder = value?.placeholder || "Enter the requested details";
+            typeof interruptValue === "string"
+                ? interruptValue
+                : interruptValue?.message ||
+                interruptValue?.prompt ||
+                interruptValue?.question ||
+                "The agent requires your input.";
+        const placeholder =
+            interruptValue?.placeholder || "Enter the requested details";
 
         const submitSimpleInput = () => {
             const enteredValue = input.trim();
@@ -71,15 +250,9 @@ function InterruptDialog({ request, input, setInput, submit }) {
             <div className="interrupt-overlay" role="dialog" aria-modal="true">
                 <div className="interrupt-modal">
                     <div className="interrupt-header">
-                        <div className="interrupt-icon">
-                            <ShieldCheck size={25} />
-                        </div>
-                        <div>
-                            <h2>{title}</h2>
-                            <p>{message}</p>
-                        </div>
+                        <div className="interrupt-icon"><ShieldCheck size={25} /></div>
+                        <div><h2>{title}</h2><p>{message}</p></div>
                     </div>
-
                     <textarea
                         className="interrupt-textarea"
                         rows={4}
@@ -94,7 +267,6 @@ function InterruptDialog({ request, input, setInput, submit }) {
                             }
                         }}
                     />
-
                     <div className="interrupt-actions">
                         <button
                             type="button"
@@ -110,38 +282,39 @@ function InterruptDialog({ request, input, setInput, submit }) {
         );
     }
 
-    // Structured tool-review HITL popup.
-    const actions = Array.isArray(value.actions) ? value.actions : [];
+    const actions = interruptValue.actions || [];
 
     function selectDecision(decision) {
         setSelectedDecision(decision);
         setInput("");
-
-        if (decision === "edit") {
-            const emptyEditValues = {};
-
-            actions.forEach((action, actionIndex) => {
-                const actionKey = `${action.name}-${actionIndex}`;
-                emptyEditValues[actionKey] = {};
-
-                Object.keys(action.args || {}).forEach((argumentName) => {
-                    // Empty means keep the original value.
-                    emptyEditValues[actionKey][argumentName] = "";
-                });
-            });
-
-            setEditedActions(emptyEditValues);
-        }
+        if (decision !== "edit") setChangedArguments({});
     }
 
-    function updateEditedArgument(actionKey, argumentName, newValue) {
-        setEditedActions((current) => ({
+    function updateArgument(actionName, fieldPath, enteredValue) {
+        setChangedArguments((current) => ({
             ...current,
-            [actionKey]: {
-                ...(current[actionKey] || {}),
-                [argumentName]: newValue,
+            [actionName]: {
+                ...(current[actionName] || {}),
+                [fieldPath]: enteredValue,
             },
         }));
+    }
+
+    function createEditedActions() {
+        return actions.map((action) => {
+            const actionChanges = changedArguments[action.name] || {};
+            let finalArguments = cloneValue(action.args || {});
+
+            Object.entries(actionChanges).forEach(([fieldPath, enteredValue]) => {
+                if (enteredValue === "" || enteredValue === undefined) return;
+
+                const originalValue = getValueAtPath(action.args || {}, fieldPath);
+                const convertedValue = convertEditedValue(enteredValue, originalValue);
+                finalArguments = setValueAtPath(finalArguments, fieldPath, convertedValue);
+            });
+
+            return { action_name: action.name, args: finalArguments };
+        });
     }
 
     function submitReview() {
@@ -153,49 +326,21 @@ function InterruptDialog({ request, input, setInput, submit }) {
         }
 
         if (selectedDecision === "respond" || selectedDecision === "reject") {
-            const message = input.trim();
-            if (!message) return;
-            submit({ decision: selectedDecision, message });
+            const customMessage = input.trim();
+            if (!customMessage) return;
+            submit({ decision: selectedDecision, message: customMessage });
             return;
         }
 
         if (selectedDecision === "edit") {
-            const editedActionList = actions.map((action, actionIndex) => {
-                const actionKey = `${action.name}-${actionIndex}`;
-                const enteredValues = editedActions[actionKey] || {};
-                const changedArguments = {};
-
-                Object.entries(enteredValues).forEach(([argumentName, newValue]) => {
-                    const normalizedValue =
-                        typeof newValue === "string" ? newValue.trim() : newValue;
-
-                    if (
-                        normalizedValue !== "" &&
-                        normalizedValue !== null &&
-                        normalizedValue !== undefined
-                    ) {
-                        changedArguments[argumentName] = normalizedValue;
-                    }
-                });
-
-                return {
-                    action_index: actionIndex,
-                    action_name: action.name,
-                    args: changedArguments,
-                };
-            });
-
-            submit({
-                decision: "edit",
-                edited_actions: editedActionList,
-            });
+            submit({ decision: "edit", edited_actions: createEditedActions() });
         }
     }
 
-    const requiresMessage =
+    const requiresCustomMessage =
         selectedDecision === "respond" || selectedDecision === "reject";
     const submitDisabled =
-        !selectedDecision || (requiresMessage && !input.trim());
+        !selectedDecision || (requiresCustomMessage && !input.trim());
 
     return (
         <div
@@ -206,130 +351,92 @@ function InterruptDialog({ request, input, setInput, submit }) {
         >
             <div className="interrupt-modal tool-review-modal">
                 <div className="interrupt-header">
-                    <div className="interrupt-icon">
-                        <ShieldCheck size={25} />
-                    </div>
+                    <div className="interrupt-icon"><ShieldCheck size={25} /></div>
                     <div>
                         <h2 id="tool-review-title">
-                            {value.title || "Review tool execution"}
+                            {interruptValue.title || "Human Review Required"}
                         </h2>
-                        <p>{value.message || "Review the requested tool actions."}</p>
+                        <p>
+                            {interruptValue.message ||
+                                "Review the following tool actions and provide your decision."}
+                        </p>
                     </div>
                 </div>
 
-                {value.table && (
-                    <div className="tool-review-table">
-                        Target table: <strong>{value.table}</strong>
+                {interruptValue.table && (
+                    <div className="tool-target-table">
+                        <span>Target table</span>
+                        <strong>{interruptValue.table}</strong>
                     </div>
                 )}
 
-                <div className="tool-review-actions-list">
-                    {actions.map((action, actionIndex) => {
-                        const actionKey = `${action.name}-${actionIndex}`;
-
-                        return (
-                            <div className="tool-review-action-card" key={actionKey}>
-                                <div className="tool-review-action-header">
-                                    <div>
-                                        <span className="tool-review-number">
-                                            Action {actionIndex + 1}
-                                        </span>
-                                        <h3>{action.name}</h3>
-                                    </div>
-                                    <span className="tool-risk-label">Risk review</span>
+                <div className="tool-review-action-list">
+                    {actions.map((action, actionIndex) => (
+                        <section
+                            className="tool-review-card"
+                            key={`${action.name}-${actionIndex}`}
+                        >
+                            <div className="tool-review-card-header">
+                                <div>
+                                    <span className="tool-action-number">Action {actionIndex + 1}</span>
+                                    <h3>{humanizeFieldName(action.name)}</h3>
                                 </div>
-
-                                <p className="tool-risk-message">
-                                    {action.risk_analysis ||
-                                        action.risk ||
-                                        "Risk analysis unavailable."}
-                                </p>
-
-                                <div className="original-arguments">
-                                    <h4>Current tool arguments</h4>
-                                    <pre className="interrupt-details">
-                                        {displayText(action.args || {})}
-                                    </pre>
-                                </div>
-
-                                {selectedDecision === "edit" && (
-                                    <div className="edit-arguments">
-                                        {Object.entries(action.args || {}).map(
-                                            ([argumentName, originalValue]) => (
-                                                <label className="edit-field" key={argumentName}>
-                                                    <span>{argumentName}</span>
-                                                    <input
-                                                        type="text"
-                                                        value={
-                                                            editedActions[actionKey]?.[argumentName] ?? ""
-                                                        }
-                                                        placeholder="Leave empty to keep current value"
-                                                        onChange={(event) =>
-                                                            updateEditedArgument(
-                                                                actionKey,
-                                                                argumentName,
-                                                                event.target.value
-                                                            )
-                                                        }
-                                                    />
-                                                    <small>
-                                                        Current value: {displayText(originalValue)}
-                                                    </small>
-                                                </label>
-                                            )
-                                        )}
-                                    </div>
-                                )}
+                                <span className="tool-risk-badge">Risk review</span>
                             </div>
-                        );
-                    })}
+
+                            <div className="tool-risk-content">
+                                {action.risk_analysis ||
+                                    action.risk ||
+                                    "Risk analysis unavailable."}
+                            </div>
+
+                            {selectedDecision === "edit" ? (
+                                <>
+                                    <h4 className="tool-section-title">Edit tool arguments</h4>
+                                    <ToolEditForm
+                                        action={action}
+                                        editedValues={changedArguments[action.name] || {}}
+                                        onChange={updateArgument}
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    <h4 className="tool-section-title">Current tool arguments</h4>
+                                    <ToolArgumentDisplay action={action} />
+                                </>
+                            )}
+                        </section>
+                    ))}
                 </div>
 
-                <div className="decision-selector">
-                    <button
-                        type="button"
-                        className={`decision-button decision-approve ${selectedDecision === "approve" ? "decision-button-selected" : ""
-                            }`}
-                        onClick={() => selectDecision("approve")}
-                    >
-                        Approve
-                    </button>
-                    <button
-                        type="button"
-                        className={`decision-button decision-edit ${selectedDecision === "edit" ? "decision-button-selected" : ""
-                            }`}
-                        onClick={() => selectDecision("edit")}
-                    >
-                        Edit
-                    </button>
-                    <button
-                        type="button"
-                        className={`decision-button decision-respond ${selectedDecision === "respond" ? "decision-button-selected" : ""
-                            }`}
-                        onClick={() => selectDecision("respond")}
-                    >
-                        Respond
-                    </button>
-                    <button
-                        type="button"
-                        className={`decision-button decision-reject ${selectedDecision === "reject" ? "decision-button-selected" : ""
-                            }`}
-                        onClick={() => selectDecision("reject")}
-                    >
-                        Reject
-                    </button>
+                <div className="tool-decision-grid">
+                    {[
+                        ["approve", "Approve", "tool-approve-button"],
+                        ["edit", "Edit", "tool-edit-button"],
+                        ["respond", "Respond", "tool-respond-button"],
+                        ["reject", "Reject", "tool-reject-button"],
+                    ].map(([decision, label, className]) => (
+                        <button
+                            type="button"
+                            key={decision}
+                            className={`tool-decision-button ${className} ${selectedDecision === decision ? "tool-decision-selected" : ""
+                                }`}
+                            onClick={() => selectDecision(decision)}
+                        >
+                            {label}
+                        </button>
+                    ))}
                 </div>
 
                 {selectedDecision === "approve" && (
-                    <div className="decision-help approve-help">
-                        The displayed tool actions will run using their current arguments.
+                    <div className="tool-decision-message tool-approve-message">
+                        The displayed tool actions will be executed without changes.
                     </div>
                 )}
 
                 {selectedDecision === "edit" && (
-                    <div className="decision-help edit-help">
-                        Leave a field empty to keep its current value. Enter a value only
-                        for arguments you want to change.
+                    <div className="tool-decision-message tool-edit-message">
+                        Enter only values you want to change. Blank fields keep their current values.
                     </div>
                 )}
 
@@ -350,7 +457,7 @@ function InterruptDialog({ request, input, setInput, submit }) {
                         rows={4}
                         autoFocus
                         value={input}
-                        placeholder="Enter the reason for rejection"
+                        placeholder="Enter the rejection reason"
                         onChange={(event) => setInput(event.target.value)}
                     />
                 )}
@@ -377,6 +484,7 @@ function InterruptDialog({ request, input, setInput, submit }) {
         </div>
     );
 }
+
 export default function App() {
     const initial = useRef(createConversation());
     const [conversations, setConversations] = useState([initial.current]);

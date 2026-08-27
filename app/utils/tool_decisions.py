@@ -1,4 +1,5 @@
 from typing import Any
+from copy import deepcopy
 import json
 
 
@@ -84,13 +85,65 @@ def convert_edited_value(
 
 
 
-def build_tool_decisions(
-    action_requests: list,
-    human_review: dict,
-) -> list:
+from copy import deepcopy
+from typing import Any
+
+
+def merge_edited_arguments(
+    original: dict[str, Any],
+    edited: dict[str, Any],
+) -> dict[str, Any]:
     """
-    Convert the frontend review response into the decision
-    structure expected by Command(resume={"decisions": ...}).
+    Recursively merge edited arguments into original arguments.
+
+    Empty strings and None retain the original value.
+    Existing argument types are preserved where possible.
+    """
+
+    merged = deepcopy(original)
+
+    for key, new_value in edited.items():
+        if new_value is None:
+            continue
+
+        if (
+            isinstance(new_value, str)
+            and not new_value.strip()
+        ):
+            continue
+
+        original_value = original.get(key)
+
+        if (
+            isinstance(original_value, dict)
+            and isinstance(new_value, dict)
+        ):
+            merged[key] = merge_edited_arguments(
+                original=original_value,
+                edited=new_value,
+            )
+        else:
+            merged[key] = convert_edited_value(
+                new_value=new_value,
+                original_value=original_value,
+            )
+
+    return merged
+
+
+def build_tool_decisions(
+    action_requests: list[dict[str, Any]],
+    human_review: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """
+    Convert the frontend HITL response into the decision
+    structure required by Command(resume={"decisions": ...}).
+
+    Supported decisions:
+    - approve
+    - edit
+    - respond
+    - reject
     """
 
     if not isinstance(human_review, dict):
@@ -115,9 +168,12 @@ def build_tool_decisions(
             "or reject."
         )
 
-    decisions = []
+    decisions: list[dict[str, Any]] = []
 
+    # -----------------------------------------------------
     # APPROVE
+    # -----------------------------------------------------
+
     if decision_type == "approve":
         for action in action_requests:
             decisions.append(
@@ -129,7 +185,10 @@ def build_tool_decisions(
 
         return decisions
 
+    # -----------------------------------------------------
     # RESPOND
+    # -----------------------------------------------------
+
     if decision_type == "respond":
         response_message = str(
             human_review.get("message", "")
@@ -154,7 +213,10 @@ def build_tool_decisions(
 
         return decisions
 
+    # -----------------------------------------------------
     # REJECT
+    # -----------------------------------------------------
+
     if decision_type == "reject":
         rejection_reason = str(
             human_review.get("message", "")
@@ -179,7 +241,10 @@ def build_tool_decisions(
 
         return decisions
 
+    # -----------------------------------------------------
     # EDIT
+    # -----------------------------------------------------
+
     edited_actions = human_review.get(
         "edited_actions",
         [],
@@ -193,70 +258,78 @@ def build_tool_decisions(
     for action_index, action in enumerate(
         action_requests
     ):
-        action_name = action["name"]
+        if not isinstance(action, dict):
+            raise ValueError(
+                "Each action request must be an object."
+            )
 
-        original_args = dict(
-            action.get("args", {})
+        action_name = action.get("name")
+
+        if not action_name:
+            raise ValueError(
+                "Each action request must have a name."
+            )
+
+        original_args = action.get(
+            "args",
+            {},
         )
 
-        # action_index is used because two actions might
-        # have the same tool name.
-        matching_edit = next(
-            (
-                edited_action
-                for edited_action in edited_actions
+        if not isinstance(original_args, dict):
+            raise ValueError(
+                f"Original arguments for {action_name} "
+                "must be an object."
+            )
+
+        matching_edit = None
+
+        # First try action_index because it uniquely identifies
+        # actions when the same tool is requested multiple times.
+        for edited_action in edited_actions:
+            if not isinstance(edited_action, dict):
+                continue
+
+            edited_action_index = edited_action.get(
+                "action_index"
+            )
+
+            if edited_action_index == action_index:
+                matching_edit = edited_action
+                break
+
+        # The current React frontend sends action_name.
+        if matching_edit is None:
+            for edited_action in edited_actions:
+                if not isinstance(edited_action, dict):
+                    continue
+
                 if (
-                    edited_action.get(
-                        "action_index"
-                    )
-                    == action_index
-                )
-            ),
-            None,
-        )
+                    edited_action.get("action_name")
+                    == action_name
+                ):
+                    matching_edit = edited_action
+                    break
 
-        changed_args = {}
-
-        if matching_edit is not None:
-            changed_args = matching_edit.get(
+        if matching_edit is None:
+            # No changes supplied for this action.
+            edited_args = {}
+        else:
+            edited_args = matching_edit.get(
                 "args",
                 {},
             )
 
-        if not isinstance(changed_args, dict):
+        if not isinstance(edited_args, dict):
             raise ValueError(
                 f"Edited arguments for {action_name} "
                 "must be an object."
             )
 
-        # Begin with all original/default values.
-        final_args = original_args.copy()
+        final_args = merge_edited_arguments(
+            original=original_args,
+            edited=edited_args,
+        )
 
-        for argument_name, new_value in (
-            changed_args.items()
-        ):
-            # Empty means keep the existing value.
-            if new_value is None:
-                continue
-
-            if (
-                isinstance(new_value, str)
-                and not new_value.strip()
-            ):
-                continue
-
-            original_value = original_args.get(
-                argument_name
-            )
-
-            final_args[argument_name] = (
-                convert_edited_value(
-                    new_value=new_value,
-                    original_value=original_value,
-                )
-            )
-
-        # Exactly one edit decision per tool action.
         decisions.append(
             {
                 "type": "edit",
@@ -269,4 +342,3 @@ def build_tool_decisions(
         )
 
     return decisions
-
