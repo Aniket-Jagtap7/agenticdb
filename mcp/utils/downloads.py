@@ -1,17 +1,12 @@
 import os
-
 from pathlib import Path
 from urllib.parse import quote
-
 from dotenv import load_dotenv
 
 
 load_dotenv()
 
-
-CSV_DIRECTORY = Path(
-    "/home/ubuntu/DB_Project/mcp/csv_data"
-).resolve()
+CSV_DIRECTORY = Path("/home/ubuntu/DB_Project/mcp/csv_data").resolve()
 
 
 MCP_PUBLIC_BASE_URL = os.getenv(
@@ -20,9 +15,7 @@ MCP_PUBLIC_BASE_URL = os.getenv(
 ).rstrip("/")
 
 
-def create_download_url(
-    file_path_value: str | Path,
-) -> dict[str, str]:
+def create_download_url(file_path_value: str | Path,) -> dict[str, str]:
     """
     Validate a generated CSV path and return safe download
     metadata without exposing the physical filesystem path.

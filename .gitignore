@@ -36,3 +36,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# react modules
+app/frontend/node_modules/
+#csv files
+mcp/csv_data/

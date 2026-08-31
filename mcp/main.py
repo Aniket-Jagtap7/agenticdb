@@ -31,9 +31,7 @@ async def health():
 
 
 @app.get("/downloads/{file_name}")
-async def download_csv_file(
-    file_name: str,
-):
+async def download_csv_file(file_name: str):
     safe_file_name = Path(file_name).name
 
     if safe_file_name != file_name:
@@ -48,9 +46,7 @@ async def download_csv_file(
             detail="Only CSV files can be downloaded.",
         )
 
-    file_path = (
-        CSV_DIRECTORY / safe_file_name
-    ).resolve()
+    file_path = (CSV_DIRECTORY / safe_file_name).resolve()
 
     if file_path.parent != CSV_DIRECTORY:
         raise HTTPException(
@@ -58,10 +54,7 @@ async def download_csv_file(
             detail="Invalid file location.",
         )
 
-    if (
-        not file_path.exists()
-        or not file_path.is_file()
-    ):
+    if (not file_path.exists() or not file_path.is_file()):
         raise HTTPException(
             status_code=404,
             detail="CSV file not found.",

@@ -1,15 +1,10 @@
 import ast
 import json
 from typing import Any, Awaitable, Callable
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-
 from agents.admin_agent import invoke_admin_agent
 from agents.main_agent import invoke_main_agent
-from utils.hitl_context import (
-    reset_human_input_handler,
-    set_human_input_handler,
-)
+from utils.hitl_context import (reset_human_input_handler, set_human_input_handler)
 
 
 app = FastAPI(title="Database AI Assistant")
@@ -68,10 +63,7 @@ def create_websocket_human_input_handler(websocket: WebSocket):
             await websocket.send_json(
                 {
                     "type": "error",
-                    "message": (
-                        "The graph is waiting for human input. "
-                        "Please answer the popup."
-                    ),
+                    "message": ("The graph is waiting for human input. Please answer the popup."),
                 }
             )
 
@@ -138,7 +130,6 @@ def extract_download_metadata(event: dict[str, Any]) -> dict[str, str] | None:
 
     structured_content: dict[str, Any] | None = None
 
-    # Preferred source for the FastMCP ToolMessage shown in your event.
     artifact = getattr(tool_output, "artifact", None)
     if isinstance(artifact, dict):
         candidate = artifact.get("structured_content")
@@ -160,12 +151,7 @@ def extract_download_metadata(event: dict[str, Any]) -> dict[str, str] | None:
         return None
 
     return {
-        "message": str(
-            structured_content.get(
-                "message",
-                "The generated CSV file is ready.",
-            )
-        ),
+        "message": str(structured_content.get("message", "The generated CSV file is ready.")),
         "file_name": str(file_name),
         "download_url": str(download_url),
     }
@@ -191,56 +177,31 @@ def normalize_chunk_content(content: Any) -> str:
     return ""
 
 
-async def stream_agent(
-    websocket: WebSocket,
-    invoke_agent: AgentInvoker,
-) -> None:
-    """Run either the main or admin agent over one WebSocket connection."""
+async def stream_agent(websocket: WebSocket, invoke_agent: AgentInvoker,) -> None:
 
     await websocket.accept()
-
     get_human_input = create_websocket_human_input_handler(websocket)
 
     try:
-        await websocket.send_json(
-            {
-                "type": "connected",
-                "message": "Database Assistant Started!",
-            }
-        )
+        await websocket.send_json({"type": "connected", "message": "Database Assistant Started!"})
 
         while True:
             frontend_message = await websocket.receive_json()
             message_type = frontend_message.get("type")
 
             if message_type == "exit":
-                await websocket.send_json(
-                    {
-                        "type": "goodbye",
-                        "message": "Goodbye!",
-                    }
-                )
+                await websocket.send_json({"type": "goodbye", "message": "Goodbye!"})
                 await websocket.close(code=1000)
                 return
 
             if message_type != "message":
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": "Expected a user message.",
-                    }
-                )
+                await websocket.send_json({"type": "error", "message": "Expected a user message."})
                 continue
 
             user_message = str(frontend_message.get("content", "")).strip()
 
             if not user_message:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": "Message cannot be empty.",
-                    }
-                )
+                await websocket.send_json({"type": "error", "message": "Message cannot be empty."})
                 continue
 
             handler_token = set_human_input_handler(get_human_input)
@@ -250,8 +211,6 @@ async def stream_agent(
             generated_files: list[dict[str, str]] = []
 
             try:
-                # Both invoke_main_agent and invoke_admin_agent still accept
-                # only the user message.
                 stream = await invoke_agent(user_message)
 
                 async for event in stream:
@@ -262,12 +221,7 @@ async def stream_agent(
                         status_message = EVENTS.get(tool_name)
 
                         if status_message:
-                            await websocket.send_json(
-                                {
-                                    "type": "status",
-                                    "content": status_message,
-                                }
-                            )
+                            await websocket.send_json({"type": "status", "content": status_message})
 
                     elif event_type == "on_tool_end":
                         download_metadata = extract_download_metadata(event)
@@ -282,10 +236,7 @@ async def stream_agent(
 
                             if not is_duplicate:
                                 generated_files.append(download_metadata)
-                                print(
-                                    "Captured generated file:",
-                                    download_metadata,
-                                )
+                                print("Captured generated file:", download_metadata)
 
                     elif event_type == "on_chat_model_stream":
                         chunk = event.get("data", {}).get("chunk")
@@ -300,8 +251,7 @@ async def stream_agent(
                                 }
                             )
 
-                # The agent stream has ended. Send files after all model text,
-                # but before the complete event.
+                # The agent stream has ended. Sending files after all model text,
                 for generated_file in generated_files:
                     await websocket.send_json(
                         {
@@ -312,11 +262,7 @@ async def stream_agent(
                         }
                     )
 
-                await websocket.send_json(
-                    {
-                        "type": "complete",
-                    }
-                )
+                await websocket.send_json({"type": "complete",})
 
             except WebSocketDisconnect:
                 raise
@@ -325,11 +271,7 @@ async def stream_agent(
                 print("Agent execution error:", agent_error)
 
                 await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": str(agent_error),
-                    }
-                )
+                    {"type": "error", "message": str(agent_error)})
 
             finally:
                 reset_human_input_handler(handler_token)
@@ -341,12 +283,8 @@ async def stream_agent(
         print("WebSocket error:", error)
 
         try:
-            await websocket.send_json(
-                {
-                    "type": "error",
-                    "message": str(error),
-                }
-            )
+            await websocket.send_json({"type": "error", "message": str(error)})
+            
         except Exception:
             pass
 
@@ -376,7 +314,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        app,
-        host="127.0.0.1",
-        port=8001,
-    )
+        app, host="127.0.0.1", port=8001)
