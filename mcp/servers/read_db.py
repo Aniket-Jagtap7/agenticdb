@@ -1,6 +1,7 @@
 from fastapi import Query, HTTPException, APIRouter
 from fastmcp import FastMCP
 from utils.schema import Entities
+from utils.downloads import create_download_url
 from database.db import db
 from pathlib import Path
 import csv
@@ -120,13 +121,20 @@ async def direct_execute_query(query:str):
                     writer.writeheader() # first row
                     writer.writerows(res["query_result"]) # remaining rows
 
+                download = create_download_url(file_path)
+
                 return {
                     "message" : f"fetched {len(res["query_result"])} rows. Result of query is availabe in provided csv file",
-                    "file_path" : file_path 
+                    "file_name" : download['file_name'],
+                    "download_url" : download['download_url'],
+                    "status" : "success"
                 }
 
             else:
-                return res
+                return {
+                    "result" : res,
+                    "status" : "success"
+                }
    
         except Exception as e:
                 error_message = f"DB_ERROR: {str(e)}"

@@ -642,3 +642,52 @@ button:disabled {
         padding: 8px 12px 14px;
     }
 }
+
+.message-attachments {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.file-attachment {
+    padding: 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: #eff6ff;
+}
+
+.file-attachment-message {
+    margin-bottom: 8px;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.download-file-link {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 5px 8px;
+    overflow: hidden;
+    color: #2563eb;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 8px;
+    background: #dbeafe;
+    transition: color 140ms ease, background 140ms ease;
+}
+
+.download-file-link:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+    background: #bfdbfe;
+}
+
+.download-file-link:focus {
+    outline: 2px solid #60a5fa;
+    outline-offset: 3px;
+}

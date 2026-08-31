@@ -5,12 +5,17 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.agents.middleware import ModelCallLimitMiddleware, ToolCallLimitMiddleware
 from typing import TypedDict
 from pydantic import BaseModel
+from enum import Enum
 import asyncio
 from utils.prompt_loader import load_prompt 
 from utils.llm import get_llm
 from utils.mcp_client import MCPTools
 
 llm = get_llm()
+
+class Stautus(str, Enum):
+    SUCCESS = "success"
+    FAILED = "failed"
 
 class AgentState(TypedDict):
     user_query : str
@@ -19,6 +24,7 @@ class AgentState(TypedDict):
     query_result : str | None = None
     retry_feedback : str | None = None
     retry_count : int
+    status : Stautus
     
 
 class TableOutput(BaseModel):
@@ -73,7 +79,7 @@ async def get_table_schema(state: AgentState):
 class QueryOutput(BaseModel):
     query_result : str | None = None
     retry_feedback : str | None = None
-
+    status : Stautus
 
 # middleware for model call limit
 model_call_limit = ModelCallLimitMiddleware(run_limit=3, exit_behavior="error")
@@ -109,6 +115,7 @@ async def final_node(state : AgentState):
         return {
             "query_result": str(structured.query_result) or None,
             "retry_feedback" : structured.retry_feedback or None,
+            "status" : structured.status or None,
             "retry_count" : state.get("retry_count", 0) + 1
         }
     

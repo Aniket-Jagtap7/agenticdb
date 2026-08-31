@@ -27,14 +27,58 @@ const displayText = (value) => {
 
 function ChatMessage({ message }) {
     const user = message.role === "user";
+
     return (
-        <div className={`message-row ${user ? "message-row-user" : "message-row-assistant"}`}>
-            {!user && <div className="avatar avatar-assistant"><Bot size={18} /></div>}
-            <div className={`message-bubble ${user ? "message-bubble-user" : "message-bubble-assistant"}`}>
-                <div className="message-content">{message.content}</div>
+        <div
+            className={`message-row ${user ? "message-row-user" : "message-row-assistant"
+                }`}
+        >
+            {!user && (
+                <div className="avatar avatar-assistant">
+                    <Bot size={18} />
+                </div>
+            )}
+
+            <div
+                className={`message-bubble ${user ? "message-bubble-user" : "message-bubble-assistant"
+                    }`}
+            >
+                {message.content && (
+                    <div className="message-content">{message.content}</div>
+                )}
+
+                {message.attachments?.length > 0 && (
+                    <div className="message-attachments">
+                        {message.attachments.map((attachment) => (
+                            <div className="file-attachment" key={attachment.id}>
+                                {attachment.message && (
+                                    <div className="file-attachment-message">
+                                        {attachment.message}
+                                    </div>
+                                )}
+
+                                <a
+                                    className="download-file-link"
+                                    href={attachment.downloadUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download={attachment.fileName}
+                                >
+                                    {attachment.fileName}
+                                </a>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 {message.streaming && <span className="streaming-cursor" />}
             </div>
-            {user && <div className="avatar avatar-user"><User size={18} /></div>}
+
+            {user && (
+                <div className="avatar avatar-user">
+                    <User size={18} />
+                </div>
+            )}
         </div>
     );
 }
@@ -385,9 +429,7 @@ function InterruptDialog({ request, input, setInput, submit }) {
                             </div>
 
                             <div className="tool-risk-content">
-                                {action.risk_analysis ||
-                                    action.risk ||
-                                    "Risk analysis unavailable."}
+                                {action.risk || "Risk analysis unavailable."}
                             </div>
 
                             {selectedDecision === "edit" ? (
@@ -532,6 +574,56 @@ export default function App() {
         }));
     };
 
+
+    const appendFileAttachment = (fileData) => {
+        if (!fileData?.file_name || !fileData?.download_url) return;
+
+        updateConversation(activeIdRef.current, (conversation) => {
+            const messages = [...conversation.messages];
+            const attachment = {
+                id: generateId(),
+                message: fileData.message || "The generated file is ready.",
+                fileName: fileData.file_name,
+                downloadUrl: fileData.download_url,
+            };
+
+            let assistantMessageIndex = -1;
+
+            for (let index = messages.length - 1; index >= 0; index -= 1) {
+                if (messages[index].role === "assistant") {
+                    assistantMessageIndex = index;
+                    break;
+                }
+            }
+
+            if (assistantMessageIndex >= 0) {
+                const assistantMessage = messages[assistantMessageIndex];
+
+                messages[assistantMessageIndex] = {
+                    ...assistantMessage,
+                    streaming: false,
+                    attachments: [
+                        ...(assistantMessage.attachments || []),
+                        attachment,
+                    ],
+                };
+            } else {
+                messages.push({
+                    id: generateId(),
+                    role: "assistant",
+                    content: "",
+                    attachments: [attachment],
+                    streaming: false,
+                });
+            }
+
+            return {
+                ...conversation,
+                messages,
+            };
+        });
+    };
+
     useEffect(() => {
         let activeComponent = true;
         const socket = new WebSocket(socketUrl(mode));
@@ -571,6 +663,14 @@ export default function App() {
                 case "result":
                     finishAssistant();
                     appendResult(response.data);
+                    break;
+                case "file":
+                    finishAssistant();
+                    appendFileAttachment({
+                        message: response.message,
+                        file_name: response.file_name,
+                        download_url: response.download_url,
+                    });
                     break;
                 case "complete":
                     setStreaming(false);

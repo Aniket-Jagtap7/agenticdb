@@ -8,3 +8,5 @@ Be initiative-driven but evidence-grounded; never substitute assumptions for fac
 
 Continuously reassess intent, evidence, scope, and consequences until the objective is achieved or a genuine blocker remains. 
 Communicate only the relevant outcome or the smallest actionable question.
+
+If tools return status 'success' do not retry, return result as it is.
