@@ -542,10 +542,59 @@ export default function App() {
     const socketRef = useRef(null);
     const activeIdRef = useRef(initial.current.id);
     const bottomRef = useRef(null);
+    const noticeTimerRef = useRef(null);
 
     useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
     const active = useMemo(() => conversations.find((c) => c.id === activeId) || conversations[0], [conversations, activeId]);
     const updateConversation = (id, updater) => setConversations((items) => items.map((item) => item.id === id ? updater(item) : item));
+
+    const showTemporaryNotice = (message, duration = 2500) => {
+        if (noticeTimerRef.current) {
+            window.clearTimeout(noticeTimerRef.current);
+        }
+
+        setNotice(message);
+
+        noticeTimerRef.current = window.setTimeout(() => {
+            setNotice("");
+            noticeTimerRef.current = null;
+        }, duration);
+    };
+
+    const showAgentStatus = (content) => {
+        if (!content) return;
+
+        updateConversation(activeIdRef.current, (conversation) => {
+            const messages = [...conversation.messages];
+            const last = messages.at(-1);
+
+            if (last?.role === "assistant" && last.type === "status") {
+                messages[messages.length - 1] = {
+                    ...last,
+                    content,
+                };
+            } else {
+                messages.push({
+                    id: generateId(),
+                    role: "assistant",
+                    type: "status",
+                    content,
+                    streaming: true,
+                });
+            }
+
+            return { ...conversation, messages };
+        });
+    };
+
+    const clearAgentStatus = () => {
+        updateConversation(activeIdRef.current, (conversation) => ({
+            ...conversation,
+            messages: conversation.messages.filter(
+                (message) => message.type !== "status",
+            ),
+        }));
+    };
 
     const finishAssistant = () => updateConversation(activeIdRef.current, (conversation) => ({
         ...conversation,
@@ -556,11 +605,30 @@ export default function App() {
 
     const appendChunk = (content) => {
         if (!content) return;
+
         updateConversation(activeIdRef.current, (conversation) => {
             const messages = [...conversation.messages];
+
+            if (messages.at(-1)?.type === "status") {
+                messages.pop();
+            }
+
             const last = messages.at(-1);
-            if (last?.role === "assistant" && last.streaming) messages[messages.length - 1] = { ...last, content: last.content + content };
-            else messages.push({ id: generateId(), role: "assistant", content, streaming: true });
+
+            if (last?.role === "assistant" && last.streaming) {
+                messages[messages.length - 1] = {
+                    ...last,
+                    content: last.content + content,
+                };
+            } else {
+                messages.push({
+                    id: generateId(),
+                    role: "assistant",
+                    content,
+                    streaming: true,
+                });
+            }
+
             return { ...conversation, messages };
         });
     };
@@ -645,26 +713,31 @@ export default function App() {
             switch (response.type) {
                 case "connected":
                     setStatus("connected");
-                    setNotice(response.message || "Connected to Database Assistant.");
+                    showTemporaryNotice(
+                        response.message || "Connected to Database Assistant.",
+                    );
                     break;
                 case "status":
-                    setNotice(response.content || "");
+                    showAgentStatus(response.content || "Agent is working...");
                     break;
                 case "chunk":
                     appendChunk(response.content || "");
                     break;
                 case "interrupt":
                     setStreaming(false);
+                    clearAgentStatus();
                     finishAssistant();
                     setInterrupt({ value: response.value });
                     setInterruptInput("");
                     setNotice("Human input is required before the agent can continue.");
                     break;
                 case "result":
+                    clearAgentStatus();
                     finishAssistant();
                     appendResult(response.data);
                     break;
                 case "file":
+                    clearAgentStatus();
                     finishAssistant();
                     appendFileAttachment({
                         message: response.message,
@@ -674,11 +747,13 @@ export default function App() {
                     break;
                 case "complete":
                     setStreaming(false);
+                    clearAgentStatus();
                     finishAssistant();
                     setNotice("");
                     break;
                 case "error":
                     setStreaming(false);
+                    clearAgentStatus();
                     finishAssistant();
                     setNotice(response.message || "An unexpected backend error occurred.");
                     break;
@@ -704,6 +779,12 @@ export default function App() {
         };
         return () => {
             activeComponent = false;
+
+            if (noticeTimerRef.current) {
+                window.clearTimeout(noticeTimerRef.current);
+                noticeTimerRef.current = null;
+            }
+
             if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close();
             socketRef.current = null;
         };
@@ -730,7 +811,7 @@ export default function App() {
         socketRef.current.send(JSON.stringify({ type: "message", content: text }));
         setInput("");
         setStreaming(true);
-        setNotice("Agent is working...");
+        setNotice("");
     };
 
     const submitInterrupt = (value) => {
@@ -739,11 +820,12 @@ export default function App() {
         setInterrupt(null);
         setInterruptInput("");
         setStreaming(true);
-        setNotice("Resuming agent execution...");
+        setNotice("");
+        showAgentStatus("Resuming agent execution...");
     };
 
     const messages = active?.messages || [];
-    const suggestions = ["Show all available tables", "Describe the employees schema", "Find the top five salaries", "Count employees by department"];
+    const suggestions = ["Show all available tables", "Find managers by department", "Find the top five salaries", "Count employees by department"];
 
     return (
         <div className="app-shell">
