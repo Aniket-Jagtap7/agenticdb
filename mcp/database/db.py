@@ -41,15 +41,15 @@ class Database:
             except Exception as e:  
                 cls._admin_pool = None
                 cls._pool = None
-                cls._pool_error = f"DB_Error: {e}"
-            
+                cls._pool_error = RuntimeError(e)
+                
         return cls._instance
 
 
     def execute_query(self, query: str, value=None):
 
         if self._pool is None:
-            return self._pool_error
+            raise self._pool_error
 
         conn = None
 
@@ -65,43 +65,33 @@ class Database:
                     print("Executed query:", query)
                     
                 query_type = query.strip().split()[0].lower()
-
-                if query_type in (
-                    "select",
-                    "show",
-                    "describe",
-                    "desc",
-                    "explain"
-                ):
-
+                if query_type in ("select", "show", "describe", "desc", "explain"):
                     result = cursor.fetchall()
                     warnings = []
 
                     try:
                         warnings = cursor.fetchwarnings() or []
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        raise
 
                     return {
                         "query_result": result,
-                        "warnings": warnings[:10]
+                        "warnings": warnings[:10],
+                        "status" : "success"
                     }
 
                 conn.commit()
-
                 return {
                     "message": "Success"
                 }
 
         except Exception as e:
-
             if conn:
                 conn.rollback()
 
-            return f"DB_ERROR: {str(e)}"
+            raise e 
 
         finally:
-
             if conn and conn.is_connected():
                 conn.close()
 
@@ -109,7 +99,7 @@ class Database:
     def execute_admin_query(self, query: str, value=None):
 
         if self._admin_pool is None:
-            return self._pool_error
+            raise self._pool_error
 
         conn = None
 
@@ -124,17 +114,10 @@ class Database:
 
                 query_type = query.strip().split()[0].lower()
 
-                if query_type in (
-                    "select",
-                    "show",
-                    "describe",
-                    "desc",
-                    "explain"
-                ):
+                if query_type in ("select", "show", "describe", "desc", "explain"):
                     result = cursor.fetchall()
-
                     return result
-
+                
                 conn.commit()
 
                 return {
@@ -145,7 +128,7 @@ class Database:
             if conn:
                 conn.rollback()
 
-            return f"DB_ERROR: {str(e)}"
+            raise e
 
         finally:
             if conn and conn.is_connected():
@@ -153,27 +136,20 @@ class Database:
 
 
     async def run_db_query(self, query: str, value=None):
-        try:
-            print("Executing query:", query)
-            return await asyncio.to_thread(
-                self.execute_query,
-                query,
-                value
-            )
-        
-        except Exception as e:
-            return f"Error:{e}"
-
+        print("Executing query:", query)
+        return await asyncio.to_thread(
+            self.execute_query,
+            query,
+            value
+        )
+    
 
     async def run_admin_query(self, query: str, value=None):
-        try:
-            return await asyncio.to_thread(
-                self.execute_admin_query,
-                query,
-                value
-            )
+        return await asyncio.to_thread(
+            self.execute_admin_query,
+            query,
+            value
+        )
         
-        except Exception as e:
-            return f"Error:{e}"
 
 db = Database()

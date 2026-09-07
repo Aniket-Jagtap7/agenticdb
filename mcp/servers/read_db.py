@@ -1,4 +1,4 @@
-from fastapi import Query, HTTPException, APIRouter
+from fastapi import Query, APIRouter
 from fastmcp import FastMCP
 from utils.schema import Entities
 from utils.downloads import create_download_url
@@ -53,7 +53,6 @@ async def get_columns(name: list[str] = Query(...)):
         return f"Error:{str(e)}"
 
 
-
 BLOCKED_KEYWORDS = [
     "information_schema",
     "mysql.",
@@ -70,25 +69,25 @@ BLOCKED_KEYWORDS = [
 def validate_query(query): 
     """
         Returns:
-            (True, message, updated_query)  -> Query should be blocked
-            (False, message, updated_query) -> Query is allowed
+            (True, message)  -> Query should be blocked
+            (False, message) -> Query is allowed
     """
 
     if not query or not query.strip():
-        return False, "Query cannot be empty.", None
+        return False, "Query cannot be empty."
 
     normalized = " ".join(query.strip().lower().split())
 
     # Must start with SELECT
     if not normalized.startswith("select "):
-        return False, "Only Select(read only) querys' allowed", None
+        return False, "Only Select(read only) querys' allowed"
 
     # Block dangerous schemas/functions
     if any(keyword in normalized for keyword in BLOCKED_KEYWORDS):
-        return False, "Query contains restricted keywords.", None
+        return False, "Query contains restricted keywords."
 
     # Query valid and unchanged
-    return True, "Query is valid.", None
+    return True, "Query is valid."
   
 
 
@@ -99,16 +98,17 @@ async def direct_execute_query(query:str):
         By using table and columns Build sql query according users intent pass as a string.
     """
 
-    print("*"*20," direct executing query","*"*20)
-
-    is_valid , message, modified_query = validate_query(query)   
+    is_valid , message = validate_query(query)   
     
     if not is_valid:
-        return message
+        return {
+            "Error" : message,
+            "status" : "failed"
+        }
+    
     else:
         try:    
-            final_query = modified_query if modified_query else query
-            
+            final_query = query
             res = await db.run_db_query(final_query)
 
             if  type(res) != str and len(res["query_result"]) >= 10:
@@ -131,28 +131,13 @@ async def direct_execute_query(query:str):
                 }
 
             else:
-                return {
-                    "result" : res,
-                    "status" : "success"
-                }
+                return res
    
         except Exception as e:
-                error_message = f"DB_ERROR: {str(e)}"
-                print("Returning error to endpoint:", error_message)
-                raise HTTPException(
-                    status_code=500,
-                    detail=error_message
-                )
-
-     
-
-
-
-
-
-
-
-
+                return {
+                    "Error": str(e),
+                    "status": "failed"
+                }
 
 
 
