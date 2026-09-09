@@ -19,7 +19,16 @@ async def employees(data : EmployeesModel):
 
     sql = "INSERT INTO employees (emp_no, birth_date, first_name, last_name, gender, hire_date) VALUES (%s, %s, %s, %s, %s, %s)"
     value = (data.emp_no, data.birth_date, data.first_name, data.last_name, data.gender, data.hire_date)
-    return await db.run_db_query(sql, value)
+
+    try:
+        return await db.run_db_query(sql, value)
+
+    except Exception as e:
+        return {
+            "Error" : str(e),
+            "status" : "failed"
+        }
+      
 
 
 @mcp.tool()
@@ -32,7 +41,15 @@ async def salaries(data : Salaries):
 
     sql = "INSERT INTO salaries (emp_no, salary, from_date, to_date) VALUES (%s, %s, %s, %s)"
     value = (data.emp_no, data.salary, data.from_date, data.to_date)
-    return await db.run_db_query(sql, value)
+
+    try:
+        return await db.run_db_query(sql, value)
+
+    except Exception as e:
+        return {
+            "Error" : str(e),
+            "status" : "failed"
+        }
 
 
 @mcp.tool()
@@ -43,7 +60,15 @@ async def departments(data : Departments):
 
     sql = "INSERT INTO departments (dept_no, dept_name) VALUES (%s, %s)"
     value = (data.dept_no, data.dept_name)
-    return await db.run_db_query(sql, value)
+
+    try:
+        return await db.run_db_query(sql, value)
+
+    except Exception as e:
+        return {
+            "Error": str(e),
+            "status" : "failed"
+        }
     
 
 @mcp.tool()
@@ -55,7 +80,15 @@ async def deparment_employees(data : DeptEmployee):
 
     sql = "INSERT INTO dept_name (emp_no, dept_no, from_date, to_date) VALUES (%s, %s, %s, %s)"
     value = (data.emp_no, data.dept_no, data.from_date, data.to_date)
-    return await db.run_db_query(sql, value)
+
+    try:
+        return await db.run_db_query(sql, value)
+
+    except Exception as e:
+        return {
+            "Error" : str(e),
+            "status" : "failed"
+        }
 
 
 @mcp.tool()
@@ -67,7 +100,15 @@ async def titles(data : Titles):
 
     sql = "INSERT INTO titles (emp_no, title, from_date, to_date) VALUES (%s, %s, %s, %s)"
     value = (data.emp_no, data.title, data.from_date, data.to_date)
-    return await db.run_db_query(sql, value)
+
+    try:
+        return await db.run_db_query(sql, value)
+
+    except Exception as e:
+        return {
+            "Error" : str(e),
+            "status" : "failed"
+        }
 
 
 @mcp.tool()
@@ -78,5 +119,13 @@ async def manager_of_departments(data : DeptEmployee):
     
     sql = "INSERT INTO dept_manager (emp_no, dept_no, from_date, to_date) VALUES (%s, %s, %s, %s)"
     value = (data.emp_no, data.dept_no, data.from_date, data.to_date)
-    return await db.run_db_query(sql, value)
+
+    try:
+        return await db.run_db_query(sql, value)
+
+    except Exception as e:
+        return {
+            "Error" : str(e),
+            "status" : "failed"
+        }
 

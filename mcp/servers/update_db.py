@@ -70,16 +70,16 @@ def update_to_count_query(update_sql):
 async def count_rows(query : str):
     try:
         read_query = update_to_count_query(query)
-        print("read_query:", read_query)
         row_count = await db.run_db_query(read_query)
-        print("row_count:",row_count)
+
         if type(row_count) != str:
             return f"{row_count['query_result'][0]["affected_rows"]} rows will be affected"
-        else:
-            return row_count
             
     except Exception as e:
-        return f"Error:{e}"
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
 
 
 @mcp.tool() 
@@ -87,9 +87,12 @@ async def run_query(query : str):
     '''
         Use this tool for executing sql query. 
     '''
-    #res = await update_data(query)
-    res = await db.run_db_query(query) 
-    return res
-
-
+    try:
+        res = await db.run_db_query(query) 
+        return res
+    except Exception as e:
+        return {
+            "Error": str(e), 
+            "status": "failed"
+        }
 
