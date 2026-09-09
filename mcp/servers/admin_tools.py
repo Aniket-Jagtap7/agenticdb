@@ -53,11 +53,18 @@ async def check_resource_usage(query_id : ResourceCheck):
         """
         params = query_id
 
-    res = await db.run_admin_query(query, params)
-    #print(res)
-    if len(res) == 0:
-        return "Empty set, Data is not available for provided, processlist id.."
-    return res
+    try:
+        res = await db.run_admin_query(query, params)
+    
+        if len(res) == 0:
+            return "Empty set, Data is not available for provided, processlist id.."
+        return res
+
+    except Exception as e:
+        return {
+            "Error": str(e),
+            "status": "failed"
+        } 
 
 
 @mcp.tool()
@@ -66,11 +73,18 @@ async def check_resource_usage_by_queries(query_id : tuple):
         Use this tool, to see how much CPU and memory slow queries, or long-running queries consuming.
         Requires input parameter: running query id's as a tuple(int)
     '''
+
     print("check_resource_usage_by_queries tool executing")
-    res = await check_resource_usage(query_id=query_id)
-    
-    if type(res) != list:
-        return res
+    try:
+        res = await check_resource_usage(query_id=query_id)
+        
+        if type(res) != list:
+            return res
+    except Exception as e:
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
   
     Thread_os_id =  [id['THREAD_OS_ID'] for id in res]
     processlist_id = [id['PROCESSLIST_ID'] for id in res]
@@ -125,7 +139,10 @@ async def check_resource_usage_by_queries(query_id : tuple):
         return resource_utilization
 
     except Exception as e:
-        return f"error: {e}"
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
     
 
 @mcp.tool()
@@ -134,11 +151,20 @@ async def get_query_execution_plan(query_text : str):
        Use when query inefficiency, poor optimization, table scans, or execution-plan-related issues are suspected. 
        Use to validate performance hypotheses.
     '''
+
     print("get_query_execution_plan tool executing")
     final_query = f"EXPLAIN FORMAT=JSON {query_text}"
-    res = await db.run_admin_query(final_query)
-    print(res[0]['EXPLAIN'])
-    return res[0]['EXPLAIN']
+
+    try:
+        res = await db.run_admin_query(final_query)
+        return res[0]['EXPLAIN']
+
+    except Exception as e:
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
+
 
 
 @mcp.tool()
@@ -193,8 +219,16 @@ async def get_processlist():
         ORDER BY TIME DESC
     """
 
-    res = await db.run_admin_query(query)
-    return res
+    try:
+        res = await db.run_admin_query(query)
+        return res
+
+    except Exception as e:
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
+
 
 
 @mcp.tool()
@@ -210,7 +244,10 @@ async def check_deadlocks():
         return res
     
     except Exception as e:
-        return f"Error:{e}"
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
 
 
 @mcp.tool()
@@ -265,7 +302,10 @@ async def locking_transactions_details():
         return result
     
     except Exception as e:
-        return f"Error:{e}"
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
     
 
 @mcp.tool()
@@ -305,7 +345,10 @@ async def buffer_pool_health_check():
         return result
         
     except Exception as e:
-        return f"Error:{e}"
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
 
 
 @mcp.tool()
@@ -320,8 +363,12 @@ async def mysql_innodb_diagnostics():
     try:
         res = await db.run_admin_query(query="SHOW ENGINE INNODB STATUS")
         return res[0]
+    
     except Exception as e:
-        return f"Error:{e}"
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
 
 
 @mcp.tool()
@@ -331,63 +378,67 @@ async def top_sql_analysis():
         or query-related load. Returns execution count, total and average latency, rows examined, rows returned, errors,
         and warnings for the most expensive SQL patterns.
     '''
+
     print("top_sql_analysis tool executing")
 
+    query="""
+    SELECT
+        DIGEST_TEXT,
+        COUNT_STAR,
+        ROUND(SUM_TIMER_WAIT / 1000000000000, 2) TOTAL_SEC,
+        ROUND(AVG_TIMER_WAIT / 1000000000000,2) AVG_SEC,
+        SUM_ROWS_EXAMINED,
+        SUM_ROWS_SENT,
+        SUM_ERRORS,
+        SUM_WARNINGS
+    FROM performance_schema
+        .events_statements_summary_by_digest
+
+    WHERE DIGEST_TEXT IS NOT NULL
+
+    AND DIGEST_TEXT NOT LIKE
+        '%PROCESSLIST%'
+
+    AND DIGEST_TEXT NOT LIKE
+        '%information_schema%'
+
+    AND DIGEST_TEXT NOT LIKE
+        '%performance_schema%'
+
+    AND DIGEST_TEXT NOT LIKE
+        '%SHOW GLOBAL STATUS%'
+
+    AND DIGEST_TEXT NOT LIKE
+        '%SHOW VARIABLES%'
+
+    AND DIGEST_TEXT NOT LIKE
+        '%SHOW REPLICA STATUS%'
+
+    AND DIGEST_TEXT NOT LIKE
+        '%innodb_lock_waits%'
+
+    AND DIGEST_TEXT NOT LIKE
+        '%SET autocommit%'
+
+    AND DIGEST_TEXT NOT LIKE
+        '%SET NAMES%'
+
+    AND DIGEST_TEXT NOT LIKE
+        '%version_comment%'
+
+    ORDER BY SUM_TIMER_WAIT DESC
+    LIMIT 10       
+    """
+
     try:
-        query="""
-        SELECT
-            DIGEST_TEXT,
-            COUNT_STAR,
-            ROUND(SUM_TIMER_WAIT / 1000000000000, 2) TOTAL_SEC,
-            ROUND(AVG_TIMER_WAIT / 1000000000000,2) AVG_SEC,
-            SUM_ROWS_EXAMINED,
-            SUM_ROWS_SENT,
-            SUM_ERRORS,
-            SUM_WARNINGS
-        FROM performance_schema
-            .events_statements_summary_by_digest
-
-        WHERE DIGEST_TEXT IS NOT NULL
-
-        AND DIGEST_TEXT NOT LIKE
-            '%PROCESSLIST%'
-
-        AND DIGEST_TEXT NOT LIKE
-            '%information_schema%'
-
-        AND DIGEST_TEXT NOT LIKE
-            '%performance_schema%'
-
-        AND DIGEST_TEXT NOT LIKE
-            '%SHOW GLOBAL STATUS%'
-
-        AND DIGEST_TEXT NOT LIKE
-            '%SHOW VARIABLES%'
-
-        AND DIGEST_TEXT NOT LIKE
-            '%SHOW REPLICA STATUS%'
-
-        AND DIGEST_TEXT NOT LIKE
-            '%innodb_lock_waits%'
-
-        AND DIGEST_TEXT NOT LIKE
-            '%SET autocommit%'
-
-        AND DIGEST_TEXT NOT LIKE
-            '%SET NAMES%'
-
-        AND DIGEST_TEXT NOT LIKE
-            '%version_comment%'
-
-        ORDER BY SUM_TIMER_WAIT DESC
-        LIMIT 10       
-        """
-
         res = await db.run_admin_query(query=query)
         return res[0]
 
     except Exception as e:
-        return f"Error:{e}"
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
 
 
 @mcp.tool()
@@ -397,6 +448,7 @@ async def wait_event_analysis():
         CPU, execution plans, or buffer pool metrics. Returns top wait events including disk I/O, metadata locks, 
         InnoDB synchronization, and internal resource contention to help identify hidden bottlenecks.
     '''
+    
     print("wait_event_analysis tool executing..")
     query="""
         SELECT
@@ -419,5 +471,9 @@ async def wait_event_analysis():
     try:
         res = await db.run_admin_query(query)
         return res
+    
     except Exception as e:
-        return f"Error:{e}"
+        return {
+            "Error": str(e),
+            "status": "failed"
+        }
