@@ -4,8 +4,10 @@ from typing import Any, Awaitable, Callable
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from agents.admin_agent import invoke_admin_agent
 from agents.main_agent import invoke_main_agent
-from utils.hitl_context import (reset_human_input_handler, set_human_input_handler)
+from utils.hitl_context import reset_human_input_handler, set_human_input_handler
+from utils.user_context import reset_current_user, set_current_user
 from auth.router import router as auth_router
+from auth.websocket import authenticate_websocket, reject_unauthenticated_websocket
 
 
 app = FastAPI(title="Database AI Assistant")
@@ -180,11 +182,27 @@ def normalize_chunk_content(content: Any) -> str:
 
 async def stream_agent(websocket: WebSocket, invoke_agent: AgentInvoker,) -> None:
 
+    authenticated_user = await authenticate_websocket(websocket)
+
+    if authenticated_user is None:
+        await reject_unauthenticated_websocket(websocket)
+        return
+    
     await websocket.accept()
     get_human_input = create_websocket_human_input_handler(websocket)
 
     try:
-        await websocket.send_json({"type": "connected", "message": "Database Assistant Started!"})
+        await websocket.send_json(
+            {
+                "type": "connected", 
+                "message": "Database Assistant Started!",
+                "user": {
+                    "id": authenticated_user.get("id", ""),
+                    "username": authenticated_user.get("username", ""),
+                    "display_name": authenticated_user.get("display_name", ""),
+                }
+            }
+        )
 
         while True:
             frontend_message = await websocket.receive_json()
@@ -206,6 +224,7 @@ async def stream_agent(websocket: WebSocket, invoke_agent: AgentInvoker,) -> Non
                 continue
 
             handler_token = set_human_input_handler(get_human_input)
+            user_context_token = set_current_user(authenticated_user)
             generated_files: list[dict[str, str]] = []
 
             try:
@@ -272,6 +291,7 @@ async def stream_agent(websocket: WebSocket, invoke_agent: AgentInvoker,) -> Non
                     {"type": "error", "message": str(agent_error)})
 
             finally:
+                reset_current_user(user_context_token)
                 reset_human_input_handler(handler_token)
 
     except WebSocketDisconnect:
