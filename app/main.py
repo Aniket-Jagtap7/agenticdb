@@ -5,9 +5,13 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from agents.admin_agent import invoke_admin_agent
 from agents.main_agent import invoke_main_agent
 from utils.hitl_context import (reset_human_input_handler, set_human_input_handler)
+from auth.router import router as auth_router
 
 
 app = FastAPI(title="Database AI Assistant")
+
+# adding the auth router to the main app
+app.include_router(auth_router)
 
 
 EVENTS = {
@@ -113,7 +117,6 @@ def parse_tool_message_content(content: Any) -> dict[str, Any] | None:
 def extract_download_metadata(event: dict[str, Any]) -> dict[str, str] | None:
     """
     Extract file metadata only from direct_execute_query on_tool_end events.
-
     A read result that did not generate a CSV will not contain both
     file_name and download_url, so it is ignored automatically.
     """
@@ -158,8 +161,6 @@ def extract_download_metadata(event: dict[str, Any]) -> dict[str, str] | None:
 
 
 def normalize_chunk_content(content: Any) -> str:
-    """Convert common model chunk content shapes into displayable text."""
-
     if isinstance(content, str):
         return content
 
@@ -205,9 +206,6 @@ async def stream_agent(websocket: WebSocket, invoke_agent: AgentInvoker,) -> Non
                 continue
 
             handler_token = set_human_input_handler(get_human_input)
-
-            # Reset for every new user message. Files generated in another
-            # turn will never be appended to the current response.
             generated_files: list[dict[str, str]] = []
 
             try:

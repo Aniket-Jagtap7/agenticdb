@@ -12,6 +12,7 @@ env/
 # Environment variables
 .env
 
+
 # Distribution / packaging
 build/
 dist/
@@ -39,5 +40,7 @@ Thumbs.db
 
 # react modules
 app/frontend/node_modules/
+app/frontend/.vite/
+
 #csv files
 mcp/csv_data/
