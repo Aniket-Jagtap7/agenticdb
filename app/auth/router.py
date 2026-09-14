@@ -16,6 +16,7 @@ def create_user_response(user: dict) -> UserResponse:
         username=user["username"],
         email=user.get("email"),
         display_name=user["display_name"],
+        role=user["role"],
     )
 
 

@@ -10,6 +10,12 @@ export default defineConfig({
         strictPort: true,
 
         proxy: {
+
+            "/auth": {
+                target: "http://127.0.0.1:8001",
+                changeOrigin: true,
+            },
+
             "/chat": {
                 target: "ws://127.0.0.1:8001",
                 ws: true,

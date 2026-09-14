@@ -691,3 +691,131 @@ button:disabled {
     outline: 2px solid #60a5fa;
     outline-offset: 3px;
 }
+
+
+/* Authentication screen */
+.auth-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: #f8fafc;
+}
+
+.auth-card {
+    width: min(420px, 100%);
+    padding: 30px;
+    border: 1px solid #e2e8f0;
+    border-radius: 22px;
+    background: #ffffff;
+    box-shadow: 0 24px 60px rgb(15 23 42 / 12%);
+}
+
+.auth-logo {
+    display: grid;
+    width: 54px;
+    height: 54px;
+    place-items: center;
+    color: #ffffff;
+    border-radius: 16px;
+    background: #7c3aed;
+}
+
+.auth-card h1 {
+    margin: 18px 0 6px;
+    color: #172033;
+    font-size: 26px;
+}
+
+.auth-card>p {
+    margin: 0 0 22px;
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.auth-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 15px;
+}
+
+.auth-field span {
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.auth-field input {
+    width: 100%;
+    height: 44px;
+    padding: 10px 12px;
+    color: #172033;
+    font: inherit;
+    border: 1px solid #cbd5e1;
+    border-radius: 11px;
+    outline: none;
+}
+
+.auth-field input:focus {
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 3px rgb(124 58 237 / 12%);
+}
+
+.auth-error {
+    margin-top: 15px;
+    padding: 10px 12px;
+    color: #b91c1c;
+    font-size: 13px;
+    border-radius: 10px;
+    background: #fee2e2;
+}
+
+.auth-submit {
+    width: 100%;
+    margin-top: 20px;
+    padding: 12px;
+    color: #ffffff;
+    font-weight: 700;
+    border: 0;
+    border-radius: 11px;
+    background: #7c3aed;
+    cursor: pointer;
+}
+
+.auth-submit:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.auth-loading {
+    color: #475569;
+    text-align: center;
+}
+
+.topbar-account {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.current-user-name {
+    color: #475569;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.logout-button {
+    padding: 7px 10px;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    background: #ffffff;
+    cursor: pointer;
+}
+
+.logout-button:hover {
+    background: #f8fafc;
+}

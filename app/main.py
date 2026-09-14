@@ -7,7 +7,8 @@ from agents.main_agent import invoke_main_agent
 from utils.hitl_context import reset_human_input_handler, set_human_input_handler
 from utils.user_context import reset_current_user, set_current_user
 from auth.router import router as auth_router
-from auth.websocket import authenticate_websocket, reject_unauthenticated_websocket
+from auth.websocket import authenticate_websocket, reject_unauthenticated_websocket, FORBIDDEN_WEBSOCKET_CODE
+from auth.authorization import AuthorizationError, ensure_admin 
 
 
 app = FastAPI(title="Database AI Assistant")
@@ -180,14 +181,39 @@ def normalize_chunk_content(content: Any) -> str:
     return ""
 
 
-async def stream_agent(websocket: WebSocket, invoke_agent: AgentInvoker,) -> None:
+async def stream_agent(
+    websocket: WebSocket, 
+    invoke_agent: AgentInvoker,
+    *,
+    admin_only: bool = False
+) -> None:
 
     authenticated_user = await authenticate_websocket(websocket)
 
     if authenticated_user is None:
         await reject_unauthenticated_websocket(websocket)
         return
-    
+
+    if admin_only:
+        try:
+            ensure_admin(authenticated_user)
+        except AuthorizationError as auth_error:
+            await websocket.accept()
+            await websocket.send_json(
+                {
+                    "type": "authorization_error",
+                    "code" : "FORBIDDEN",
+                    "message": str(auth_error),
+                }
+            )
+
+            await websocket.close(
+                code = FORBIDDEN_WEBSOCKET_CODE,
+                reason="Administrator access required",
+            )
+
+            return
+            
     await websocket.accept()
     get_human_input = create_websocket_human_input_handler(websocket)
 
@@ -200,6 +226,7 @@ async def stream_agent(websocket: WebSocket, invoke_agent: AgentInvoker,) -> Non
                     "id": authenticated_user.get("id", ""),
                     "username": authenticated_user.get("username", ""),
                     "display_name": authenticated_user.get("display_name", ""),
+                    "role": authenticated_user.get("role", ""),
                 }
             }
         )
@@ -312,6 +339,7 @@ async def user_chat(websocket: WebSocket) -> None:
     await stream_agent(
         websocket=websocket,
         invoke_agent=invoke_main_agent,
+        admin_only=False,
     )
 
 
@@ -320,6 +348,7 @@ async def admin_chat(websocket: WebSocket) -> None:
     await stream_agent(
         websocket=websocket,
         invoke_agent=invoke_admin_agent,
+        admin_only=True,
     )
 
 

@@ -14,7 +14,8 @@ def find_user_by_username(username: str) -> dict | None:
             email,
             display_name,
             password_hash,
-            is_active
+            is_active,
+            role
         FROM app_users
         WHERE username = %s
         LIMIT 1
@@ -74,6 +75,7 @@ def find_user_by_session_hash(token_hash: str) -> dict | None:
             u.email,
             u.display_name,
             u.is_active,
+            u.role,
             s.id AS session_id,
             s.expires_at
         FROM auth_sessions AS s

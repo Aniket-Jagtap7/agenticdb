@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import Literal
 
 
 class LoginRequest(BaseModel):
@@ -11,6 +12,7 @@ class UserResponse(BaseModel):
     username: str
     email: str | None
     display_name: str
+    role : Literal["user", "admin"]
 
 
 class LoginResponse(BaseModel):

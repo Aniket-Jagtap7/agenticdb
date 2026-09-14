@@ -527,6 +527,66 @@ function InterruptDialog({ request, input, setInput, submit }) {
     );
 }
 
+
+function LoginScreen({ onLogin, error, loading }) {
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+
+    function submitLogin(event) {
+        event.preventDefault();
+
+        if (!username.trim() || !password) return;
+
+        onLogin({
+            username: username.trim(),
+            password,
+        });
+    }
+
+    return (
+        <div className="auth-page">
+            <form className="auth-card" onSubmit={submitLogin}>
+                <div className="auth-logo">
+                    <Database size={28} />
+                </div>
+
+                <h1>Database Copilot</h1>
+                <p>Sign in to continue to the database assistant.</p>
+
+                <label className="auth-field">
+                    <span>Username</span>
+                    <input
+                        type="text"
+                        autoComplete="username"
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
+                    />
+                </label>
+
+                <label className="auth-field">
+                    <span>Password</span>
+                    <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                    />
+                </label>
+
+                {error && <div className="auth-error">{error}</div>}
+
+                <button
+                    type="submit"
+                    className="auth-submit"
+                    disabled={loading || !username.trim() || !password}
+                >
+                    {loading ? "Signing in..." : "Sign in"}
+                </button>
+            </form>
+        </div>
+    );
+}
+
 export default function App() {
     const initial = useRef(createConversation());
     const [conversations, setConversations] = useState([initial.current]);
@@ -537,6 +597,10 @@ export default function App() {
     const [streaming, setStreaming] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [notice, setNotice] = useState("");
+    const [currentUser, setCurrentUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+    const [loginLoading, setLoginLoading] = useState(false);
+    const [authError, setAuthError] = useState("");
     const [interrupt, setInterrupt] = useState(null);
     const [interruptInput, setInterruptInput] = useState("");
     const socketRef = useRef(null);
@@ -692,7 +756,107 @@ export default function App() {
         });
     };
 
+    async function loadCurrentUser() {
+        try {
+            const response = await fetch("/auth/me", {
+                method: "GET",
+                credentials: "include",
+            });
+
+            if (!response.ok) {
+                setCurrentUser(null);
+                return;
+            }
+
+            const data = await response.json();
+            setCurrentUser(data.user || null);
+        } catch (error) {
+            console.error("Unable to check authentication:", error);
+            setCurrentUser(null);
+        } finally {
+            setAuthLoading(false);
+        }
+    }
+
+    async function login(credentials) {
+        setLoginLoading(true);
+        setAuthError("");
+
+        try {
+            const response = await fetch("/auth/login", {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(credentials),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || "Login failed.");
+            }
+
+            setCurrentUser(data.user);
+            setMode("chat");
+        } catch (error) {
+            setAuthError(error.message || "Login failed.");
+        } finally {
+            setLoginLoading(false);
+        }
+    }
+
+    async function logout() {
+        try {
+            await fetch("/auth/logout", {
+                method: "POST",
+                credentials: "include",
+            });
+        } catch (error) {
+            console.error("Logout request failed:", error);
+        } finally {
+            const socket = socketRef.current;
+
+            if (
+                socket &&
+                (socket.readyState === WebSocket.OPEN ||
+                    socket.readyState === WebSocket.CONNECTING)
+            ) {
+                socket.close(1000, "User logged out");
+            }
+
+            if (socketRef.current === socket) {
+                socketRef.current = null;
+            }
+
+            const conversation = createConversation();
+
+            // Keep the state ID and mutable ref synchronized. Without this,
+            // messages for the next logged-in user are written using the old ID.
+            activeIdRef.current = conversation.id;
+            setActiveId(conversation.id);
+            setConversations([conversation]);
+
+            setCurrentUser(null);
+            setMode("chat");
+            setInput("");
+            setInterrupt(null);
+            setInterruptInput("");
+            setStreaming(false);
+            setStatus("disconnected");
+            setNotice("");
+            setAuthError("");
+        }
+    }
+
     useEffect(() => {
+        loadCurrentUser();
+    }, []);
+
+    useEffect(() => {
+        if (!currentUser?.id) return undefined;
+
         let activeComponent = true;
         const socket = new WebSocket(socketUrl(mode));
         socketRef.current = socket;
@@ -751,6 +915,25 @@ export default function App() {
                     finishAssistant();
                     setNotice("");
                     break;
+                case "authentication_error":
+                    setStreaming(false);
+                    clearAgentStatus();
+                    setCurrentUser(null);
+                    setAuthError(response.message || "Your session expired. Please sign in again.");
+                    break;
+                case "authorization_error":
+                    setStreaming(false);
+                    clearAgentStatus();
+                    finishAssistant();
+                    showTemporaryNotice(
+                        response.message || "You are not authorized to access this feature.",
+                        4000,
+                    );
+
+                    if (mode === "admin") {
+                        setMode("chat");
+                    }
+                    break;
                 case "error":
                     setStreaming(false);
                     clearAgentStatus();
@@ -765,16 +948,31 @@ export default function App() {
                     console.warn("Unknown WebSocket message", response);
             }
         };
-        socket.onerror = () => {
-            if (activeComponent) {
-                setStatus("disconnected");
-                setNotice("WebSocket connection failed. Confirm that the backend is running.");
-            }
-        };
-        socket.onclose = () => {
+        socket.onerror = (error) => {
+            console.error("WebSocket error:", error);
+
             if (activeComponent) {
                 setStatus("disconnected");
                 setStreaming(false);
+                showTemporaryNotice(
+                    "WebSocket connection failed. Confirm that the backend is running.",
+                    4000,
+                );
+            }
+        };
+        socket.onclose = (event) => {
+            if (activeComponent) {
+                setStatus("disconnected");
+                setStreaming(false);
+
+                if (event.code === 4401) {
+                    setCurrentUser(null);
+                    setAuthError("Your session expired. Please sign in again.");
+                }
+
+                if (event.code === 4403 && mode === "admin") {
+                    setMode("chat");
+                }
             }
         };
         return () => {
@@ -785,15 +983,25 @@ export default function App() {
                 noticeTimerRef.current = null;
             }
 
-            if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close();
-            socketRef.current = null;
+            if (
+                socket.readyState === WebSocket.OPEN ||
+                socket.readyState === WebSocket.CONNECTING
+            ) {
+                socket.close();
+            }
+
+            if (socketRef.current === socket) {
+                socketRef.current = null;
+            }
         };
-    }, [mode]);
+    }, [mode, currentUser?.id]);
 
     useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [active?.messages, streaming]);
 
     const newChat = () => {
         const conversation = createConversation();
+
+        activeIdRef.current = conversation.id;
         setConversations((items) => [conversation, ...items]);
         setActiveId(conversation.id);
         setInput("");
@@ -801,17 +1009,57 @@ export default function App() {
 
     const sendMessage = () => {
         const text = input.trim();
-        if (!text || streaming || interrupt) return;
-        if (socketRef.current?.readyState !== WebSocket.OPEN) { setNotice("The backend is not connected."); return; }
+
+        if (!text || streaming || interrupt) {
+            return;
+        }
+
+        const socket = socketRef.current;
+
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            showTemporaryNotice(
+                "The backend connection is not ready. Please wait a moment.",
+                3000,
+            );
+            return;
+        }
+
+        // Add the user's message immediately, before sending it to FastAPI.
         updateConversation(activeIdRef.current, (conversation) => ({
             ...conversation,
-            title: conversation.messages.length ? conversation.title : `${text.slice(0, 40)}${text.length > 40 ? "..." : ""}`,
-            messages: [...conversation.messages, { id: generateId(), role: "user", content: text, streaming: false }],
+            title: conversation.messages.length
+                ? conversation.title
+                : `${text.slice(0, 40)}${text.length > 40 ? "..." : ""}`,
+            messages: [
+                ...conversation.messages,
+                {
+                    id: generateId(),
+                    role: "user",
+                    content: text,
+                    streaming: false,
+                },
+            ],
         }));
-        socketRef.current.send(JSON.stringify({ type: "message", content: text }));
+
         setInput("");
         setStreaming(true);
         setNotice("");
+
+        try {
+            socket.send(
+                JSON.stringify({
+                    type: "message",
+                    content: text,
+                }),
+            );
+        } catch (error) {
+            console.error("Unable to send WebSocket message:", error);
+            setStreaming(false);
+            showTemporaryNotice(
+                "The message could not be sent because the connection was interrupted.",
+                4000,
+            );
+        }
     };
 
     const submitInterrupt = (value) => {
@@ -825,7 +1073,25 @@ export default function App() {
     };
 
     const messages = active?.messages || [];
-    const suggestions = ["Show all available tables", "Find managers by department", "Find the top five salaries", "Count employees by department"];
+    const suggestions = ["Show all available tables", "Describe the employees schema", "Find the top five salaries", "Count employees by department"];
+
+    if (authLoading) {
+        return (
+            <div className="auth-page">
+                <div className="auth-card auth-loading">Checking your session...</div>
+            </div>
+        );
+    }
+
+    if (!currentUser) {
+        return (
+            <LoginScreen
+                onLogin={login}
+                error={authError}
+                loading={loginLoading}
+            />
+        );
+    }
 
     return (
         <div className="app-shell">
@@ -835,7 +1101,10 @@ export default function App() {
                 <div className="sidebar-label">Recent</div>
                 <div className="conversation-list">
                     {conversations.map((conversation) => (
-                        <button type="button" key={conversation.id} className={`conversation-button ${conversation.id === activeId ? "conversation-button-active" : ""}`} onClick={() => setActiveId(conversation.id)}>{conversation.title}</button>
+                        <button type="button" key={conversation.id} className={`conversation-button ${conversation.id === activeId ? "conversation-button-active" : ""}`} onClick={() => {
+                            activeIdRef.current = conversation.id;
+                            setActiveId(conversation.id);
+                        }}>{conversation.title}</button>
                     ))}
                 </div>
                 <div className="connection-card">
@@ -850,10 +1119,31 @@ export default function App() {
                         <button type="button" className="icon-button" onClick={() => setSidebarOpen((value) => !value)}><Menu size={21} /></button>
                         <div className="agent-selector">
                             <button type="button" className={`agent-button ${mode === "chat" ? "agent-button-active" : ""}`} disabled={streaming || Boolean(interrupt)} onClick={() => setMode("chat")}><Sparkles size={17} /><span>Main Agent</span></button>
-                            <button type="button" className={`agent-button agent-button-admin ${mode === "admin" ? "agent-button-active" : ""}`} disabled={streaming || Boolean(interrupt)} onClick={() => setMode("admin")}><ShieldCheck size={17} /><span>Admin Agent</span></button>
+                            {currentUser?.role === "admin" && (
+                                <button
+                                    type="button"
+                                    className={`agent-button agent-button-admin ${mode === "admin" ? "agent-button-active" : ""
+                                        }`}
+                                    disabled={streaming || Boolean(interrupt)}
+                                    onClick={() => setMode("admin")}
+                                >
+                                    <ShieldCheck size={17} />
+                                    <span>Admin Agent</span>
+                                </button>
+                            )}
                         </div>
                     </div>
-                    <div className={`status-pill status-${status}`}>{status === "connected" ? "Online" : status === "connecting" ? "Connecting" : "Offline"}</div>
+                    <div className="topbar-account">
+                        <span className="current-user-name">
+                            {currentUser.display_name}
+                        </span>
+                        <button type="button" className="logout-button" onClick={logout}>
+                            Logout
+                        </button>
+                        <div className={`status-pill status-${status}`}>
+                            {status === "connected" ? "Online" : status === "connecting" ? "Connecting" : "Offline"}
+                        </div>
+                    </div>
                 </header>
 
                 <section className="chat-area">
