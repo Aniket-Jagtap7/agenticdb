@@ -14,6 +14,7 @@ import {
     X,
 } from "lucide-react";
 import "./interrupt.css";
+import "./ai.css";
 
 let idCounter = 0;
 const generateId = () => `${Date.now()}-${++idCounter}-${Math.random().toString(36).slice(2, 9)}`;
@@ -27,59 +28,61 @@ const displayText = (value) => {
 
 function ChatMessage({ message }) {
     const user = message.role === "user";
+    const statusMessage = message.type === "status";
 
     return (
-        <div
-            className={`message-row ${user ? "message-row-user" : "message-row-assistant"
-                }`}
+        <article
+            className={`ai-turn ${user ? "ai-turn-user" : "ai-turn-assistant"
+                } ${statusMessage ? "ai-turn-status" : ""}`}
         >
-            {!user && (
-                <div className="avatar avatar-assistant">
-                    <Bot size={18} />
-                </div>
-            )}
-
-            <div
-                className={`message-bubble ${user ? "message-bubble-user" : "message-bubble-assistant"
-                    }`}
-            >
-                {message.content && (
-                    <div className="message-content">{message.content}</div>
-                )}
-
-                {message.attachments?.length > 0 && (
-                    <div className="message-attachments">
-                        {message.attachments.map((attachment) => (
-                            <div className="file-attachment" key={attachment.id}>
-                                {attachment.message && (
-                                    <div className="file-attachment-message">
-                                        {attachment.message}
-                                    </div>
-                                )}
-
-                                <a
-                                    className="download-file-link"
-                                    href={attachment.downloadUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    download={attachment.fileName}
-                                >
-                                    {attachment.fileName}
-                                </a>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {message.streaming && <span className="streaming-cursor" />}
+            <div className={`ai-turn-avatar ${user ? "ai-avatar-user" : "ai-avatar-agent"}`}>
+                {user ? <User size={17} /> : <Bot size={18} />}
             </div>
 
-            {user && (
-                <div className="avatar avatar-user">
-                    <User size={18} />
+            <div className="ai-turn-body">
+                <div className="ai-turn-meta">
+                    <strong>{user ? "You" : statusMessage ? "Agent activity" : "Database Copilot"}</strong>
+                    {!user && !statusMessage && <span className="ai-badge">AI</span>}
+                    {statusMessage && <span className="ai-status-pulse" aria-hidden="true" />}
                 </div>
-            )}
-        </div>
+
+                <div className={`ai-turn-content ${user ? "ai-user-surface" : ""}`}>
+                    {message.content && (
+                        <div className="message-content">{message.content}</div>
+                    )}
+
+                    {message.attachments?.length > 0 && (
+                        <div className="message-attachments">
+                            {message.attachments.map((attachment) => (
+                                <div className="file-attachment" key={attachment.id}>
+                                    <div className="file-attachment-icon">
+                                        <Database size={18} />
+                                    </div>
+                                    <div className="file-attachment-copy">
+                                        {attachment.message && (
+                                            <div className="file-attachment-message">
+                                                {attachment.message}
+                                            </div>
+                                        )}
+                                        <a
+                                            className="download-file-link"
+                                            href={attachment.downloadUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            download={attachment.fileName}
+                                        >
+                                            {attachment.fileName}
+                                        </a>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {message.streaming && <span className="streaming-cursor" />}
+                </div>
+            </div>
+        </article>
     );
 }
 
@@ -1073,7 +1076,32 @@ export default function App() {
     };
 
     const messages = active?.messages || [];
-    const suggestions = ["Show all available tables", "Describe the employees schema", "Find the top five salaries", "Count employees by department"];
+    const suggestions = [
+        {
+            eyebrow: "Explore",
+            title: "Show all available tables",
+            description: "Discover the data sources currently available to the agent.",
+            icon: <Database size={18} />,
+        },
+        {
+            eyebrow: "Understand",
+            title: "Describe the employees schema",
+            description: "Inspect columns, types, and the structure of the employee data.",
+            icon: <Sparkles size={18} />,
+        },
+        {
+            eyebrow: "Analyze",
+            title: "Find the top five salaries",
+            description: "Run a focused analysis and return the highest salary records.",
+            icon: <Bot size={18} />,
+        },
+        {
+            eyebrow: "Summarize",
+            title: "Count employees by department",
+            description: "Generate a concise department-level distribution summary.",
+            icon: <ShieldCheck size={18} />,
+        },
+    ];
 
     if (authLoading) {
         return (
@@ -1094,91 +1122,209 @@ export default function App() {
     }
 
     return (
-        <div className="app-shell">
-            <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
-                <div className="brand"><div className="brand-logo"><Database size={21} /></div><div className="brand-text"><strong>Database Copilot</strong><span>AI data assistant</span></div></div>
-                <button type="button" className="new-chat-button" onClick={newChat}><Plus size={18} /><span>New chat</span></button>
-                <div className="sidebar-label">Recent</div>
-                <div className="conversation-list">
-                    {conversations.map((conversation) => (
-                        <button type="button" key={conversation.id} className={`conversation-button ${conversation.id === activeId ? "conversation-button-active" : ""}`} onClick={() => {
-                            activeIdRef.current = conversation.id;
-                            setActiveId(conversation.id);
-                        }}>{conversation.title}</button>
-                    ))}
+        <div className="ai-app">
+            <aside className={`ai-sidebar ${sidebarOpen ? "ai-sidebar-open" : "ai-sidebar-closed"}`}>
+                <div className="ai-sidebar-brand">
+                    <div className="ai-brand-mark"><Database size={22} /></div>
+                    <div className="ai-brand-copy">
+                        <strong>Database Copilot</strong>
+                        <span>Intelligent data workspace</span>
+                    </div>
                 </div>
-                <div className="connection-card">
-                    {status === "connected" ? <Wifi size={17} className="connection-icon-connected" /> : <WifiOff size={17} className="connection-icon-disconnected" />}
-                    <div><strong>{status === "connected" ? "Backend connected" : status === "connecting" ? "Connecting..." : "Disconnected"}</strong><span>FastAPI WebSocket</span></div>
+
+                <button type="button" className="ai-new-thread" onClick={newChat}>
+                    <Plus size={18} />
+                    <span>Start new conversation</span>
+                </button>
+
+                <div className="ai-sidebar-section">
+                    <div className="ai-sidebar-heading">
+                        <span>Conversations</span>
+                        <span className="ai-count">{conversations.length}</span>
+                    </div>
+
+                    <div className="ai-thread-list">
+                        {conversations.map((conversation) => (
+                            <button
+                                type="button"
+                                key={conversation.id}
+                                className={`ai-thread-button ${conversation.id === activeId ? "ai-thread-active" : ""
+                                    }`}
+                                onClick={() => {
+                                    activeIdRef.current = conversation.id;
+                                    setActiveId(conversation.id);
+                                }}
+                            >
+                                <span className="ai-thread-icon"><Sparkles size={14} /></span>
+                                <span>{conversation.title}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="ai-sidebar-footer">
+                    <div className="ai-user-card">
+                        <div className="ai-user-avatar">
+                            {currentUser.display_name?.charAt(0)?.toUpperCase() || "U"}
+                        </div>
+                        <div className="ai-user-copy">
+                            <strong>{currentUser.display_name}</strong>
+                            <span>{currentUser.role === "admin" ? "Administrator" : "Workspace user"}</span>
+                        </div>
+                        <div className={`ai-sidebar-connection ai-sidebar-connection-${status}`}>
+                            <span className="ai-presence" />
+                            <span>{status === "connected" ? "Live" : status === "connecting" ? "Connecting" : "Offline"}</span>
+                        </div>
+                    </div>
+
+                    <button type="button" className="ai-logout" onClick={logout}>
+                        Sign out
+                    </button>
                 </div>
             </aside>
 
-            <main className="main-content">
-                <header className="topbar">
-                    <div className="topbar-left">
-                        <button type="button" className="icon-button" onClick={() => setSidebarOpen((value) => !value)}><Menu size={21} /></button>
-                        <div className="agent-selector">
-                            <button type="button" className={`agent-button ${mode === "chat" ? "agent-button-active" : ""}`} disabled={streaming || Boolean(interrupt)} onClick={() => setMode("chat")}><Sparkles size={17} /><span>Main Agent</span></button>
-                            {currentUser?.role === "admin" && (
+            <main className="ai-workspace">
+                <header className="ai-workspace-header">
+                    <div className="ai-workspace-title">
+                        <button type="button" className="ai-menu-button" onClick={() => setSidebarOpen((value) => !value)}>
+                            <Menu size={20} />
+                        </button>
+                        <div>
+                            <span className="ai-header-kicker">AI workspace</span>
+                            <h1>{mode === "admin" ? "Admin Agent" : "Main Agent"}</h1>
+                        </div>
+                    </div>
+
+                    <div className="ai-header-actions">
+                        {currentUser?.role === "admin" && (
+                            <div className="ai-agent-switcher" aria-label="Select agent">
                                 <button
                                     type="button"
-                                    className={`agent-button agent-button-admin ${mode === "admin" ? "agent-button-active" : ""
-                                        }`}
+                                    className={mode === "chat" ? "ai-agent-option ai-agent-selected" : "ai-agent-option"}
+                                    disabled={streaming || Boolean(interrupt)}
+                                    onClick={() => setMode("chat")}
+                                >
+                                    <Sparkles size={16} />
+                                    <span>Main</span>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    className={mode === "admin" ? "ai-agent-option ai-agent-selected" : "ai-agent-option"}
                                     disabled={streaming || Boolean(interrupt)}
                                     onClick={() => setMode("admin")}
                                 >
-                                    <ShieldCheck size={17} />
-                                    <span>Admin Agent</span>
+                                    <ShieldCheck size={16} />
+                                    <span>Admin</span>
                                 </button>
-                            )}
-                        </div>
-                    </div>
-                    <div className="topbar-account">
-                        <span className="current-user-name">
-                            {currentUser.display_name}
-                        </span>
-                        <button type="button" className="logout-button" onClick={logout}>
-                            Logout
-                        </button>
-                        <div className={`status-pill status-${status}`}>
-                            {status === "connected" ? "Online" : status === "connecting" ? "Connecting" : "Offline"}
-                        </div>
+                            </div>
+                        )}
                     </div>
                 </header>
 
-                <section className="chat-area">
-                    <div className="chat-container">
-                        {!messages.length ? (
-                            <div className="welcome">
-                                <div className="welcome-logo"><Database size={30} /></div>
-                                <h1>How can I help with your data?</h1>
-                                <p>Ask questions, inspect schemas, query records, or manage your database using the selected AI agent.</p>
-                                <div className="suggestion-grid">{suggestions.map((suggestion) => <button type="button" key={suggestion} className="suggestion-button" onClick={() => setInput(suggestion)}>{suggestion}</button>)}</div>
+                <section className="ai-conversation-shell">
+                    <div className="ai-conversation-scroll">
+                        <div className="ai-conversation-content">
+                            {!messages.length ? (
+                                <section className="ai-welcome-panel">
+                                    <div className="ai-welcome-orbit">
+                                        <div className="ai-welcome-mark"><Sparkles size={30} /></div>
+                                    </div>
+                                    <span className="ai-welcome-eyebrow">Your intelligent database partner</span>
+                                    <h2>Turn database questions into clear answers.</h2>
+                                    <p>
+                                        Explore schemas, analyze records, manage data, and download results through one conversational workspace.
+                                    </p>
+
+                                    <div className="ai-capability-row">
+                                        <span><Database size={14} /> Schema aware</span>
+                                        <span><Sparkles size={14} /> Agent powered</span>
+                                        <span><ShieldCheck size={14} /> Human reviewed</span>
+                                    </div>
+
+                                    <div className="ai-prompt-grid">
+                                        {suggestions.map((suggestion) => (
+                                            <button
+                                                type="button"
+                                                key={suggestion.title}
+                                                className="ai-prompt-card"
+                                                onClick={() => setInput(suggestion.title)}
+                                            >
+                                                <span className="ai-prompt-icon">{suggestion.icon}</span>
+                                                <span className="ai-prompt-copy">
+                                                    <small>{suggestion.eyebrow}</small>
+                                                    <strong>{suggestion.title}</strong>
+                                                    <span>{suggestion.description}</span>
+                                                </span>
+                                                <span className="ai-prompt-arrow">↗</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </section>
+                            ) : (
+                                <div className="ai-message-thread">
+                                    {messages.map((message) => (
+                                        <ChatMessage key={message.id} message={message} />
+                                    ))}
+                                </div>
+                            )}
+                            <div ref={bottomRef} />
+                        </div>
+                    </div>
+
+                    <div className="ai-composer-dock">
+                        <div className="ai-composer-wrap">
+                            {notice && (
+                                <div className="ai-inline-notice">
+                                    <span>{notice}</span>
+                                    <button type="button" onClick={() => setNotice("")}><X size={14} /></button>
+                                </div>
+                            )}
+
+                            <div className="ai-composer-box">
+                                <textarea
+                                    value={input}
+                                    rows={1}
+                                    placeholder={`Ask ${mode === "admin" ? "Admin Agent" : "Database Copilot"} anything about your data...`}
+                                    onChange={(event) => setInput(event.target.value)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === "Enter" && !event.shiftKey) {
+                                            event.preventDefault();
+                                            sendMessage();
+                                        }
+                                    }}
+                                />
+
+                                <div className="ai-composer-actions ai-composer-actions-end">
+                                    {streaming ? (
+                                        <button type="button" className="ai-send-button ai-stop-button" title="Agent is running">
+                                            <Square size={15} fill="currentColor" />
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            className="ai-send-button"
+                                            disabled={!input.trim() || status !== "connected" || Boolean(interrupt)}
+                                            onClick={sendMessage}
+                                        >
+                                            <Send size={18} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
-                        ) : (
-                            <div className="message-list">{messages.map((message) => <ChatMessage key={message.id} message={message} />)}</div>
-                        )}
-                        <div ref={bottomRef} />
+
+                            <div className="ai-composer-hint">AI responses can be reviewed before sensitive database actions are executed.</div>
+                        </div>
                     </div>
                 </section>
-
-                <footer className="composer-area">
-                    <div className="composer-container">
-                        {notice && <div className="notice"><span>{notice}</span><button type="button" onClick={() => setNotice("")}><X size={15} /></button></div>}
-                        <div className="composer">
-                            <textarea value={input} rows={1} placeholder={`Message ${mode === "admin" ? "Admin Agent" : "Main Agent"}...`} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} />
-                            {streaming ? (
-                                <button type="button" className="send-button stop-button" title="Agent is running"><Square size={15} fill="currentColor" /></button>
-                            ) : (
-                                <button type="button" className="send-button" disabled={!input.trim() || status !== "connected" || Boolean(interrupt)} onClick={sendMessage}><Send size={18} /></button>
-                            )}
-                        </div>
-                        <div className="composer-help">Enter to send · Shift + Enter for a new line</div>
-                    </div>
-                </footer>
             </main>
 
-            <InterruptDialog request={interrupt} input={interruptInput} setInput={setInterruptInput} submit={submitInterrupt} />
+            <InterruptDialog
+                request={interrupt}
+                input={interruptInput}
+                setInput={setInterruptInput}
+                submit={submitInterrupt}
+            />
         </div>
     );
 }
