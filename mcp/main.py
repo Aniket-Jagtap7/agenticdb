@@ -7,8 +7,12 @@ from servers.write_db import mcp_write
 from servers.update_db import mcp_update
 from servers.admin_tools import mcp_admin
 from utils.downloads import CSV_DIRECTORY
+from utils.logging_config import setup_logging
+import logging
 
 
+setup_logging(service_name="database-assistant-mcp", log_file_prefix="mcp") 
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,12 +39,14 @@ async def download_csv_file(file_name: str):
     safe_file_name = Path(file_name).name
 
     if safe_file_name != file_name:
+        logger.warning("Invalid file name attempted: %s", file_name)
         raise HTTPException(
             status_code=400,
             detail="Invalid file name.",
         )
 
     if not safe_file_name.lower().endswith(".csv"):
+        logger.warning("Invalid file type attempted: %s", file_name)
         raise HTTPException(
             status_code=400,
             detail="Only CSV files can be downloaded.",
@@ -49,12 +55,14 @@ async def download_csv_file(file_name: str):
     file_path = (CSV_DIRECTORY / safe_file_name).resolve()
 
     if file_path.parent != CSV_DIRECTORY:
+        logger.warning("Invalid file location attempted: %s", file_name)
         raise HTTPException(
             status_code=400,
             detail="Invalid file location.",
         )
 
     if (not file_path.exists() or not file_path.is_file()):
+        logger.warning("File not found or not a file: %s", file_name)
         raise HTTPException(
             status_code=404,
             detail="CSV file not found.",

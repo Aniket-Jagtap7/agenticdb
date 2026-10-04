@@ -8,16 +8,18 @@ from typing import TypedDict, Annotated, Any, Awaitable, Callable
 from operator import add
 from pydantic import BaseModel
 from enum import Enum
-import asyncio
-import uuid
-import json
 from utils.prompt_loader import load_prompt
 from utils.llm import get_llm
 from utils.mcp_client import MCPTools
 from utils.hitl_context import request_human_input
 from utils.tool_decisions import build_tool_decisions
 from langchain.tools import tool
- 
+import asyncio
+import uuid
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 # config ID's for interrupts
 thread_id = str(uuid.uuid4())
@@ -70,7 +72,7 @@ get_columns_tool = next(
 SYSTEM_PROMPT = SystemMessage(content= load_prompt("update_table_selector.txt"))
 
 async def select_table_node(state : AgentState):
-
+    logger.info("selecting tables to build query")
     feedback = state.get("retry_feedback", "")    
     human_msg = HumanMessage(content=f"""
                              User_query : {state.get("user_query")},
@@ -82,6 +84,7 @@ async def select_table_node(state : AgentState):
     model = llm.with_structured_output(TableOutput)
     try:
         response = await model.ainvoke(msg)
+        logger.info("selected tables: %s, Intent: %s", response.table, response.Intent)
         return {
             "table" : response.table,
             "Intent" : response.Intent,
@@ -89,6 +92,7 @@ async def select_table_node(state : AgentState):
         }
     
     except Exception as e:
+        logger.exception("table selector node failed")
         return f"Error:{str(e)}"
 
 
@@ -103,26 +107,31 @@ def unknown_intent_node(state : AgentState):
 
 async def get_table_schema(state: AgentState):
     try:
+        logger.info("Fetching table schema..")
         res = (await get_columns_tool.ainvoke({"name" : state.get("table")}))[0].get("text")
         return {"schema" : res}
     
     except Exception as e:
+        logger.exception("Table schema fetching failed")
         return f"error:{str(e)}"
     
 
 async def risk_analyzer(query):
+    logger.info("Analyzing a risk of query")
     count_rows_tool = next(
                     (tool for tool in tool_list if tool.name == "count_rows"),
                     None
                 )
         
     if count_rows_tool is None:
+            logger.warning("count_rows MCP tool not available")
             return "count_rows MCP tool not found"
     try:
         review_context = await count_rows_tool.ainvoke(query) 
         return review_context
     
     except Exception as e:
+        logger.exception("risk analyzer failed")
         print(f"Error: {e}")
         raise
 
@@ -151,7 +160,7 @@ Intents = {
 
 
 async def final_node(state : AgentState):
-    
+    logger.info("Building SQL query for, %s", state.get("Intent"))
     schema = {"table": state.get("table"), "columns" : state.get("schema")} 
     requested_info = f"requested_data:{state.get("revised_input")}" if state.get("revised_input") else ""
     
@@ -185,8 +194,8 @@ async def final_node(state : AgentState):
         
          # CASE 2: Tool call → HITL flow
         while response.interrupts:
-            
-            print(f"table {state.get("table")} will be updated")
+            logger.info("Waiting for Human decision..")
+            logger.info("%s table will be updated", state.get("table"))
             interrupt_value = response.interrupts[0].value
             action_requests = interrupt_value.get("action_requests", [])
             if not action_requests:
@@ -204,14 +213,12 @@ async def final_node(state : AgentState):
 
                 try:
                     risk_result = await risk_analyzer(action_args)
-                    print("risk_result:", risk_result)
                     if risk_result:
                         first_risk = risk_result[0]
                         if isinstance(first_risk, dict):
                             risk_message = first_risk.get("text", default_risk_message)
 
-                except Exception as risk_error:
-                    print("risk analyzer failed:", risk_error)
+                except Exception:
                     risk_message = default_risk_message
                 
                 review_actions.append(
@@ -222,7 +229,7 @@ async def final_node(state : AgentState):
                         "risk_analysis": risk_message
                     }
                 )
-            print("review_actions:", review_actions)
+
             review_payload = {
                 "type" : "tool_review",
                 "title" : "Human Review Required",
@@ -232,12 +239,11 @@ async def final_node(state : AgentState):
             }
 
             human_review = ( await request_human_input(review_payload))
-            print("Human review decision:", human_review)
+            logger.info("Human review decision: %s", human_review)
             
             decisions = build_tool_decisions(action_requests=action_requests, human_review=human_review)
-            print("Tool decisions:", decisions)
+            logger.info("Tool decisions: %s", decisions)
         
-            
             response = await agent.ainvoke(
                 Command(
                     resume = {"decisions": decisions},
@@ -256,11 +262,12 @@ async def final_node(state : AgentState):
         }
     
     except Exception as e:
+        logger.exception("SQL query build and execute failed")
         return {"Error" : str(e)}
 
 
 def request_info_node(state : AgentState):
-    
+    logger.info("Requesting additional information")
     revised_input = interrupt(state["Insufficient_data"])
     
     return {
@@ -333,7 +340,7 @@ graph.add_edge("request_info_node", "final_node")
 update_graph = graph.compile(checkpointer=InMemorySaver())
 
 async def invoke_update_delete_agent(user_query : str):
-   
+    logger.info("Executing sub-agent")
     input_msg = {"user_query" : user_query}
     response = await update_graph.ainvoke(input_msg, config=graph_config, version="v2") 
    
@@ -345,17 +352,15 @@ async def invoke_update_delete_agent(user_query : str):
         }
     
     while response.interrupts:
-        print("="*100)
         graph_interrupts = response.interrupts[0].value
-        print("Graph interrupts:", graph_interrupts)
-        #updated_input = input("enter requested details:")
         updated_input = await request_human_input(graph_interrupts)
         response = await update_graph.ainvoke(
             Command(resume= updated_input),
             config=graph_config,
             version="v2"
         )
-
+        
+    logger.info("sub-agent execution completed.")
     return {
         "query_result" : response.value.get("query_result", None),
         "no_schema_match" : response.value.get("no_schema_match", None),

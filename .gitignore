@@ -36,7 +36,9 @@ htmlcov/
 Thumbs.db
 
 # Logs
+logs/
 *.log
+*.log.*
 
 # react modules
 app/frontend/node_modules/

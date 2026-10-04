@@ -2,8 +2,10 @@ import asyncio
 from mysql.connector.pooling import MySQLConnectionPool
 from dotenv import load_dotenv
 import os
+import logging 
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 class Database:
 
@@ -39,6 +41,7 @@ class Database:
                 )
 
             except Exception as e:  
+                logger.error(f"Error initializing database connection pool: {e}")
                 cls._admin_pool = None
                 cls._pool = None
                 cls._pool_error = RuntimeError(e)
@@ -59,11 +62,11 @@ class Database:
             with conn.cursor(buffered=True, dictionary=True) as cursor:
                 if value is not None:
                     cursor.execute(query, value)
-                    print(f"Executed:{query},{value}")
+                    logger.info("Executed:%s, %s",query,value)
                 else:
                     cursor.execute(query)
-                    print("Executed query:", query)
-                    
+                    logger.info("Executed query: %s",query)
+
                 query_type = query.strip().split()[0].lower()
                 if query_type in ("select", "show", "describe", "desc", "explain"):
                     result = cursor.fetchall()
@@ -86,6 +89,7 @@ class Database:
                 }
 
         except Exception as e:
+            logger.error("Error executing query: %s", e)
             if conn:
                 conn.rollback()
 
@@ -109,9 +113,10 @@ class Database:
             with conn.cursor(buffered=True, dictionary=True) as cursor:
                 if value is not None:
                     cursor.execute(query, value)
+                    logger.info("Executed query: %s, %s", query, value)
                 else:
                     cursor.execute(query)
-
+                    logger.info("Executed query: %s", query)
                 query_type = query.strip().split()[0].lower()
 
                 if query_type in ("select", "show", "describe", "desc", "explain"):
@@ -125,6 +130,7 @@ class Database:
                 }
 
         except Exception as e:
+            logger.error("Error executing admin query: %s", e)
             if conn:
                 conn.rollback()
 
@@ -136,7 +142,6 @@ class Database:
 
 
     async def run_db_query(self, query: str, value=None):
-        print("Executing query:", query)
         return await asyncio.to_thread(
             self.execute_query,
             query,

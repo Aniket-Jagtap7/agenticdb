@@ -7,8 +7,9 @@ from agents.update_agent import invoke_update_delete_agent
 from agents.write_agent import invoke_write_agent
 from utils.llm import get_llm
 from utils.prompt_loader import load_prompt
+import logging
 
-
+logger = logging.getLogger(__name__)
 llm = get_llm(streaming=True)
 
 @tool
@@ -16,6 +17,7 @@ async def read_db(user_query : str):
     ''' Use this Tool for fetching data from database.
         Takes input in natural language as string
     '''
+    logger.info("Read sub-agent invoked")
     response = await invoke_read_agent(user_query= user_query)
     return response
 
@@ -25,6 +27,7 @@ async def delete_db_data(user_query : str):
     ''' Use this Tool for deleting data records from database.
         Takes input in natural language as string
     '''
+    logger.info("Delete sub-agent invoked")
     response = await invoke_update_delete_agent(user_query=user_query)
     return response
 
@@ -34,6 +37,7 @@ async def update_db_data(user_query : str):
     ''' Use this Tool updating data records in the database.
         Takes input in natural language as string
     '''
+    logger.info("Update sub-agent invoked")
     response = await invoke_update_delete_agent(user_query=user_query)
     return response
 
@@ -43,6 +47,7 @@ async def write_db_data(user_query : str):
     ''' Use this Tool adding new data records in the database.
         Takes input in natural language as string
     '''
+    logger.info("Write sub-agent invoked")
     response = await invoke_write_agent(user_query)
     return response
 
@@ -59,7 +64,7 @@ agent = create_agent(name="main_agent",
 system_prompt = SystemMessage(content=load_prompt("orchestrator_agent.txt"))
 
 async def invoke_main_agent(user_query : str):
-    
+    logger.info("main_agent (orchestrator) invoked")
     stream = agent.astream_events(
         {
             "messages" : [system_prompt, user_query]

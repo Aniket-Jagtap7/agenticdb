@@ -6,13 +6,15 @@ from utils.llm import get_llm
 from utils.mcp_client import MCPTools
 from utils.prompt_loader import load_prompt
 import asyncio
+import logging
 
 
+logger = logging.getLogger(__name__)
 llm = get_llm(streaming=True)
 
 tool = asyncio.run(MCPTools.admin_tools())
 
-tool_call_limit=ToolCallLimitMiddleware(run_limit=2, exit_behavior='end')
+tool_call_limit=ToolCallLimitMiddleware(run_limit=2, exit_behavior='error')
 
 agent = create_agent(
     name="admin_agent",
@@ -23,7 +25,7 @@ agent = create_agent(
 
 
 async def event_driven_admin_agent(report):
-    
+    logger.info("Event driven admin agent invoked")
     system_prompt = SystemMessage(content= load_prompt("event_driven_agent.txt"))
     usr_msg = HumanMessage(content=f"context:{report}")
 
@@ -38,7 +40,7 @@ async def event_driven_admin_agent(report):
 
 
 async def invoke_admin_agent(user_query : str):
-   
+    logger.info("Admin agent invoked")
     system_prompt= SystemMessage(content= load_prompt("admin_agent.txt"))
     usr_msg = HumanMessage(content= user_query)
     

@@ -1,12 +1,14 @@
+import csv
+import uuid
+import logging
 from fastapi import Query, APIRouter
 from fastmcp import FastMCP
 from utils.schema import Entities
 from utils.downloads import create_download_url
 from database.db import db
 from pathlib import Path
-import csv
-import uuid
 
+logger = logging.getLogger(__name__)
 
 # creates MCP server
 mcp = FastMCP("Read_Database")
@@ -27,11 +29,12 @@ async def get_tables():
     """ 
         Returns the all available table in database
     """
-
+    logger.info("calling get tables tool")
     try:
         tables = Table_Scehma.show_tables()
         return tables
     except Exception as e:
+        logger.error("Error occurred while fetching tables: %s", str(e))
         return f"Error:{str(e)}"
 
 
@@ -44,10 +47,10 @@ async def get_columns(name: list[str] = Query(...)):
             name: Name of table required in str format
     """
 
-    print(f"calling get column tool for {name}")
+    logger.info("calling get column tool for table: %s", name)
     try:
         columns = Table_Scehma.get_columns(*name)
-        print(columns)
+        logger.info("Retrieved columns for table: %s", name)
         return columns
     except Exception as e:
         return f"Error:{str(e)}"
@@ -97,10 +100,11 @@ async def direct_execute_query(query:str):
         Takes sql(MySQL) query as input in string fromat.
         By using table and columns Build sql query according users intent pass as a string.
     """
-
+    logger.info("Executing read sql query: %s", query)
     is_valid , message = validate_query(query)   
     
     if not is_valid:
+        logger.warning("Query validation failed: %s", message)
         return {
             "Error" : message,
             "status" : "failed"
@@ -134,10 +138,11 @@ async def direct_execute_query(query:str):
                 return res
    
         except Exception as e:
-                return {
-                    "Error": str(e),
-                    "status": "failed"
-                }
+            logger.error("Error executing query: %s", str(e))
+            return {
+                "Error": str(e),
+                "status": "failed"
+            }
 
 
 

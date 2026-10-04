@@ -9,13 +9,16 @@ from collections.abc import Callable
 from typing import TypedDict, Annotated
 from operator import add
 from pydantic import BaseModel, ValidationError
-import asyncio
-import uuid
 from utils.prompt_loader import load_prompt 
 from utils.llm import get_llm
 from utils.mcp_client import MCPTools
 from utils.hitl_context import request_human_input
 from utils.tool_decisions import build_tool_decisions
+import asyncio
+import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 # config ID's for interrupts
 thread_id = str(uuid.uuid4())
@@ -68,12 +71,14 @@ async def select_tool_node(state : AgentState):
 
     try:
         response = await model.ainvoke(msg)
+        logger.info("selected table: %s", response.tool)
         return {
             "tool" : response.tool,
             "retry_count" : state.get("retry_count", 0) + 1
         }
     
     except Exception as e:
+        logger.exception("table selection failed")
         return  f"Error:{str(e)}"
 
 
@@ -84,6 +89,7 @@ async def tool_error_handler(request : ToolCallRequest, handler : Callable[[Tool
         return await handler(request)
 
     except ValidationError as e:
+        logger.exception("Error occured in Tool call")
         return ToolMessage(content=
             "INVALID_TOOL_INPUT\n" 
             f"Tool: {request.tool_call['name']}\n"
@@ -114,7 +120,8 @@ async def  final_node(state : AgentState):
     # human in the loop middleware
     human_in_loop = HumanInTheLoopMiddleware(interrupt_on= {f"{tool_name}" : True for tool_name in state.get("tool")})
     
-    agent = create_agent(model=llm, 
+    agent = create_agent(name="write_agent",
+                         model=llm, 
                          tools=tool, 
                          response_format=QueryOutput, 
                          middleware=[tool_error_handler, model_call_limit, human_in_loop],
@@ -151,7 +158,7 @@ async def  final_node(state : AgentState):
         # CASE 2: Tool call → HITL flow
         while response.interrupts:
             
-            print(f"table {state.get("tool")} will be updated")
+            logger.info("%s tablle will be updated", state.get("tool"))
             interrupt_value = response.interrupts[0].value
             action_requests = interrupt_value.get("action_requests", [])
             if not action_requests:
@@ -172,6 +179,7 @@ async def  final_node(state : AgentState):
                         "args": action_args,
                     }
                 )
+
             print("review_actions:", review_actions)
             review_payload = {
                 "type" : "tool_review",
@@ -182,10 +190,10 @@ async def  final_node(state : AgentState):
             }
 
             human_review =  await request_human_input(review_payload)
-            print("Human review decision:", human_review)
+            logger.info("Human review decision: %s", human_review)
             
             decisions = build_tool_decisions(action_requests=action_requests, human_review=human_review)
-            print("Tool decisions:", decisions)
+            logger.info("Tool decisions: %s", decisions)
         
             
             response = await agent.ainvoke(
@@ -197,7 +205,7 @@ async def  final_node(state : AgentState):
             )
             
         structured = response.value.get("structured_response")
-    
+
         return {
             "query_result" : structured.query_result if structured else None,
             "no_schema_match" : structured.no_schema_match if structured else None,
@@ -205,11 +213,12 @@ async def  final_node(state : AgentState):
         }
     
     except Exception as e:
+        logger.exception("Error occured while saving the data.")
         return {"error" : str(e)}
         
 
 def request_info_node(state : AgentState):
-   
+    logger.info("requesting additional details")
     revised_input = interrupt(state["Insufficient_data"])
    
     return {
@@ -268,6 +277,7 @@ write_graph = graph.compile(checkpointer=InMemorySaver())
 
 
 async def invoke_write_agent(user_query : str):
+    logger.info("invoking write agent graph")
     input_msg = {"user_query" : user_query, "revised_input":[]}
     response = await write_graph.ainvoke(input_msg, config=graph_config, version="v2")
     
@@ -279,9 +289,7 @@ async def invoke_write_agent(user_query : str):
         } 
     
     while response.interrupts:
-        print("="*100)
         graph_interrupts = response.interrupts[0].value
-        print("Graph interrupts:", graph_interrupts)
         updated_input = await request_human_input(graph_interrupts)
         
         response = await write_graph.ainvoke(
@@ -289,7 +297,7 @@ async def invoke_write_agent(user_query : str):
             config=graph_config,
             version="v2"
         )
-     
+    logger.info("write sub-agent execution completed")
     return {
         "query_result" : response.value.get("query_result", None),
         "no_schema_match" : response.value.get("no_schema_match", None),

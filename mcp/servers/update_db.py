@@ -2,8 +2,10 @@ from fastmcp import FastMCP
 from fastapi import APIRouter
 from sqlglot import parse_one, exp
 from database.db import db
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 #mcp server
 mcp = FastMCP("Update_Database")
@@ -68,6 +70,7 @@ def update_to_count_query(update_sql):
 
 @mcp.tool()
 async def count_rows(query : str):
+    logger.info("Counting rows for query: %s", query)
     try:
         read_query = update_to_count_query(query)
         row_count = await db.run_db_query(read_query)
@@ -76,6 +79,7 @@ async def count_rows(query : str):
             return f"{row_count['query_result'][0]["affected_rows"]} rows will be affected"
             
     except Exception as e:
+        logger.error("Error counting rows: %s", e)
         return {
             "Error": str(e),
             "status": "failed"
@@ -87,6 +91,7 @@ async def run_query(query : str):
     '''
         Use this tool for executing sql query. 
     '''
+    logger.info("Running sql query: %s", query)
     try:
         res = await db.run_db_query(query) 
         return res

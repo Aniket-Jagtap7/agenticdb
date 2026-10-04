@@ -1,15 +1,17 @@
-from fastmcp import FastMCP
-from fastapi import APIRouter
-from database.db import db
+import smtplib
+import os
 import boto3
 import time
+import logging
+from fastmcp import FastMCP
+from database.db import db
 from utils.models import ResourceCheck
-import smtplib
 from email.mime.text import MIMEText
-import os
 from dotenv import load_dotenv
 
+
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 ssm = boto3.client('ssm', region_name="us-east-1")
 CPU_CORE = 2
@@ -61,6 +63,7 @@ async def check_resource_usage(query_id : ResourceCheck):
         return res
 
     except Exception as e:
+        logger.error("Error occurred while checking resource usage: %s", str(e))
         return {
             "Error": str(e),
             "status": "failed"
@@ -74,7 +77,7 @@ async def check_resource_usage_by_queries(query_id : tuple):
         Requires input parameter: running query id's as a tuple(int)
     '''
 
-    print("check_resource_usage_by_queries tool executing")
+    logger.info("check_resource_usage_by_queries tool executing")
     try:
         res = await check_resource_usage(query_id=query_id)
         
@@ -121,7 +124,7 @@ async def check_resource_usage_by_queries(query_id : tuple):
                     for line in  response['StandardOutputContent'].splitlines()
                     for parts in [line.split()]
                 }
-                print("CPU metrics fetched from server")
+                logger.info("CPU metrics fetched from server")
                 break
 
             else:
@@ -152,7 +155,7 @@ async def get_query_execution_plan(query_text : str):
        Use to validate performance hypotheses.
     '''
 
-    print("get_query_execution_plan tool executing")
+    logger.info("get_query_execution_plan tool executing")
     final_query = f"EXPLAIN FORMAT=JSON {query_text}"
 
     try:
@@ -187,7 +190,7 @@ async def send_email_to_admin(subject: str, body: str):
             os.getenv("PASSWORD")
         )
         server.send_message(msg)
-
+    logger.info("Email sent to admin with subject: %s", subject)
     return "Email sent successfully"
 
 
@@ -199,7 +202,7 @@ async def get_processlist():
         It provides information about the currently executing queries, including their IDs, users, hosts, databases, execution time, state, and the first 1000 characters of the query text.
     '''
     
-    print("get_processlist tool executing")
+    logger.info("get_processlist tool executing")
 
     query = """
         SELECT
@@ -237,7 +240,7 @@ async def check_deadlocks():
         Use this tool for checking dead locks in database server.
     '''
 
-    print("check_deadlocks tool executing")
+    logger.info("check_deadlocks tool executing")
     query = "SHOW ENGINE INNODB STATUS"
     try:
         res = await db.run_admin_query(query)
@@ -256,7 +259,7 @@ async def locking_transactions_details():
         Use to diagnose MySQL lock contention, blocked transactions, lock wait timeouts, and stuck DDL/DML operations. 
         Helps identify the blocking session, affected objects, and lock type.
     '''
-    print("locking_transactions_details tool executing")
+    logger.info("locking_transactions_details tool executing")
     result = {}
 
     try:
@@ -315,7 +318,7 @@ async def buffer_pool_health_check():
         Returns cache hit ratio, physical reads, buffer pool size, free pages, and dirty pages to identify memory pressure and caching inefficiencies.
     '''
 
-    print("buffer_pool_health_check tool executing")
+    logger.info("buffer_pool_health_check tool executing")
     buffer_values = {}
     result = {}
 
@@ -359,7 +362,7 @@ async def mysql_innodb_diagnostics():
         Returns InnoDB internal status useful for root cause analysis when standard health metrics are insufficient.
     '''
 
-    print("mysql_innodb_diagnostics tool executing..")
+    logger.info("mysql_innodb_diagnostics tool executing..")
     try:
         res = await db.run_admin_query(query="SHOW ENGINE INNODB STATUS")
         return res[0]
@@ -379,7 +382,7 @@ async def top_sql_analysis():
         and warnings for the most expensive SQL patterns.
     '''
 
-    print("top_sql_analysis tool executing")
+    logger.info("top_sql_analysis tool executing")
 
     query="""
     SELECT
@@ -449,7 +452,7 @@ async def wait_event_analysis():
         InnoDB synchronization, and internal resource contention to help identify hidden bottlenecks.
     '''
     
-    print("wait_event_analysis tool executing..")
+    logger.info("wait_event_analysis tool executing..")
     query="""
         SELECT
             EVENT_NAME,

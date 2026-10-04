@@ -10,3 +10,4 @@ Continuously reassess intent, evidence, scope, and consequences until the object
 Communicate only the relevant outcome or the smallest actionable question.
 
 If tools return status 'success' do not retry, return result as it is.
+if tools returns custom message as result like Netwrok/Connection/tool call limit Errors, DO not retry return custom message to user. 
