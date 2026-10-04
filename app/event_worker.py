@@ -4,7 +4,9 @@ import boto3
 import os
 from agents.admin_agent import event_driven_admin_agent
 import asyncio
+import logging
 
+logger = logging.getLogger(__name__)
 sqs = boto3.client('sqs', region_name="us-east-1")
 s3 = boto3.client('s3')
 
@@ -37,10 +39,11 @@ while True:
                                     ReceiptHandle=msg["ReceiptHandle"]
                                 )
                 
-                print("message deleted from queue")
+                logger.info("message deleted from queue")
+                
             except Exception as e:
-                print("error:", str(e))
+                logger.error("Error processing message: %s", str(e))
+                
                             
     else:
-        print("Message Not available")
         continue
