@@ -20,7 +20,7 @@ router = APIRouter()
 Table_Scehma = Entities()
 
 # folder for stroring the csv files
-dir_path = Path("/home/ubuntu/DB_Project/mcp/csv_data/")
+dir_path = Path("./csv_data/")
 dir_path.mkdir(exist_ok=True)
 
 
@@ -128,7 +128,7 @@ async def direct_execute_query(query:str):
                 download = create_download_url(file_path)
 
                 return {
-                    "message" : f"fetched {len(res["query_result"])} rows. Result of query is availabe in provided csv file",
+                    "message" : f"fetched {len(res['query_result'])} rows. Result of query is availabe in provided csv file",
                     "file_name" : download['file_name'],
                     "download_url" : download['download_url'],
                     "status" : "success"

@@ -48,6 +48,23 @@ class Database:
                 
         return cls._instance
 
+    def check_connection(self):
+        if self._pool is None:
+            raise self._pool_error
+
+        conn = None
+        try:
+            conn = self._pool.get_connection()
+            if conn.is_connected():
+                return True
+            else:
+                return False
+        except Exception as e:
+            logger.error(f"Error checking database connection: {e}")
+            return False
+        finally:
+            if conn and conn.is_connected():
+                conn.close()
 
     def execute_query(self, query: str, value=None):
 
@@ -155,6 +172,6 @@ class Database:
             query,
             value
         )
-        
+
 
 db = Database()

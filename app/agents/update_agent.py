@@ -162,7 +162,7 @@ Intents = {
 async def final_node(state : AgentState):
     logger.info("Building SQL query for, %s", state.get("Intent"))
     schema = {"table": state.get("table"), "columns" : state.get("schema")} 
-    requested_info = f"requested_data:{state.get("revised_input")}" if state.get("revised_input") else ""
+    requested_info = f"requested_data:{state.get('revised_input')}" if state.get("revised_input") else ""
     
     human_msg = HumanMessage(content=f"""
                              user_query : {state.get("user_query")},

@@ -1,10 +1,11 @@
 from langchain_mcp_adapters.client import MultiServerMCPClient
+import os
 
 
-READ_URL = "http://localhost:8000/mcp/read/"
-WRITE_URL = "http://localhost:8000/mcp/write/"
-UPDATE_URL = "http://localhost:8000/mcp/update/"
-ADMIN_URL = "http://localhost:8000/mcp/admin/" 
+READ_URL = f"{os.getenv('MCP_HOST')}/mcp/read/"
+WRITE_URL = f"{os.getenv('MCP_HOST')}/mcp/write/"
+UPDATE_URL = f"{os.getenv('MCP_HOST')}/mcp/update/"
+ADMIN_URL = f"{os.getenv('MCP_HOST')}/mcp/admin/" 
 
 
 class MCPTools:

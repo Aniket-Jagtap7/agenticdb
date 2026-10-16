@@ -6,6 +6,7 @@ from servers.read_db import mcp_read
 from servers.write_db import mcp_write
 from servers.update_db import mcp_update
 from servers.admin_tools import mcp_admin
+from database.db import db
 from utils.downloads import CSV_DIRECTORY
 from utils.logging_config import setup_logging
 import logging
@@ -32,6 +33,27 @@ async def health():
         "status": "ok",
         "service": "mcp",
     }
+
+@app.get("/health/db")
+async def health_db():
+    try:
+        if db.check_connection():
+            return {
+                "status": "ok",
+                "service": "mcp",
+                "database": "connected"
+            }
+        else:   
+            raise HTTPException(
+                status_code=500,
+                detail="Database connection failed.",
+            )
+    except Exception as e:
+        logger.error("Database health check failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database health check failed: {str(e)}",
+        )
 
 
 @app.get("/downloads/{file_name}")

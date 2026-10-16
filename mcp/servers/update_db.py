@@ -76,7 +76,7 @@ async def count_rows(query : str):
         row_count = await db.run_db_query(read_query)
 
         if type(row_count) != str:
-            return f"{row_count['query_result'][0]["affected_rows"]} rows will be affected"
+            return f"{row_count['query_result'][0]['affected_rows']} rows will be affected"
             
     except Exception as e:
         logger.error("Error counting rows: %s", e)
